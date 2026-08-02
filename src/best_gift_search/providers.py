@@ -88,9 +88,11 @@ class SerpApiCatalogProvider:
         extensions = item.get("extensions") if isinstance(item.get("extensions"), list) else []
         description = " · ".join(str(value) for value in extensions[:3]) or f"Available from {merchant}; price and availability may change."
         product_id = str(item.get("product_id") or hashlib.sha256(f"{title}|{url}".encode()).hexdigest()[:20])
+        title_terms = title.lower()
+        matched_interests = [interest for interest in intent.interests if interest.lower() in title_terms]
         return Product(
             id=f"live-{product_id}", name=title[:180], description=description[:500],
-            category="live-shopping", interests=list(intent.interests), price=price,
+            category="live-shopping", interests=matched_interests, price=price,
             shipping={intent.country: 0}, url=url, image=image, merchant=merchant,
             rating=max(0, min(5, float(item.get("rating") or 4.0))),
         )
