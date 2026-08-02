@@ -35,4 +35,5 @@ def runtime_info(loop: AgentLoop) -> dict:
         "catalog_fallbacks": getattr(loop.catalog, "fallback_count", 0),
         "model": getattr(loop.model, "model", "deterministic"),
         "model_fallbacks": getattr(loop.model, "fallback_count", 0),
+        "model_last_error": getattr(loop.model, "last_error", None),
     }
