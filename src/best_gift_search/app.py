@@ -6,18 +6,19 @@ from collections import defaultdict
 from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 
-from .agents import AgentLoop, SearchCancelled
+from .agents import SearchCancelled
 from .hooks import MetricsHook
 from .guardrails import UnsafeInput
 from .jobs import JobManager
 from .memory import MemoryStore
 from .models import AgentEvent, FeedbackRequest, JobStatus, SearchRequest, SearchResponse
+from .runtime import build_agent_loop, runtime_info
 
 app = FastAPI(title="Best Gift Search API", version="0.1.0", description="Explainable multi-agent gift discovery")
 app.add_middleware(CORSMiddleware, allow_origins=[os.getenv("BEST_GIFT_CORS", "http://localhost:5173")], allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
 memory = MemoryStore()
 metrics = MetricsHook()
-loop = AgentLoop(memory, hooks=[metrics])
+loop = build_agent_loop(memory, hooks=[metrics])
 connections: dict[str, set[WebSocket]] = defaultdict(set)
 
 
@@ -37,7 +38,7 @@ jobs = JobManager(loop, broadcast)
 
 @app.get("/health")
 def health():
-    return {"status": "ok", "service": "best-gift-search"}
+    return {"status": "ok", "service": "best-gift-search", **runtime_info(loop)}
 
 
 @app.get("/api/metrics")

@@ -1,5 +1,6 @@
 from pathlib import Path
 import time
+import pytest
 
 from fastapi.testclient import TestClient
 
@@ -7,6 +8,8 @@ from best_gift_search import app as app_module
 from best_gift_search.agents import AgentLoop
 from best_gift_search.memory import MemoryStore
 from best_gift_search.guardrails import UnsafeInput, sanitize_message
+from best_gift_search.models import Product, SearchIntent
+from best_gift_search.providers import FallbackModelProvider, OpenAIResponsesModelProvider
 
 
 def test_health():
@@ -71,3 +74,30 @@ def test_async_job_completes(tmp_path: Path):
                 break
             time.sleep(0.02)
         assert status["status"] == "complete"
+
+
+@pytest.mark.asyncio
+async def test_openai_responses_provider_contract():
+    class Responses:
+        async def create(self, **kwargs):
+            assert kwargs["model"] == "gpt-5.6-luna"
+            assert kwargs["reasoning"] == {"effort": "none"}
+            return type("Response", (), {"output_text": " Four warm, well-priced ideas. "})()
+    client = type("Client", (), {"responses": Responses()})()
+    provider = OpenAIResponsesModelProvider(client=client, model="gpt-5.6-luna")
+    assert await provider.summarize(SearchIntent(recipient="a friend"), 4) == "Four warm, well-priced ideas."
+
+
+@pytest.mark.asyncio
+async def test_model_provider_falls_back():
+    class Broken:
+        async def summarize(self, intent, count): raise OSError("offline")
+    provider = FallbackModelProvider(Broken())
+    result = await provider.summarize(SearchIntent(recipient="a friend"), 3)
+    assert result.startswith("3 thoughtful matches")
+    assert provider.fallback_count == 1
+
+
+def test_product_links_require_https():
+    with pytest.raises(ValueError):
+        Product(id="bad", name="Bad", description="Unsafe link", category="test", interests=[], price=1, shipping={"US": 0}, url="javascript:alert(1)", image="https://example.com/image.jpg", merchant="Test", rating=1)

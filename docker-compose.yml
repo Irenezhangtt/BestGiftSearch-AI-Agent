@@ -1,9 +1,17 @@
 services:
   api:
-    build: .
+    build:
+      context: .
+      args:
+        INSTALL_AI: ${INSTALL_AI:-false}
     environment:
       BEST_GIFT_DB: /data/best_gift_search.db
       BEST_GIFT_CORS: http://localhost:5173
+      BEST_GIFT_MODEL_PROVIDER: ${BEST_GIFT_MODEL_PROVIDER:-auto}
+      BEST_GIFT_OPENAI_MODEL: ${BEST_GIFT_OPENAI_MODEL:-gpt-5.6-luna}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      BEST_GIFT_CATALOG_URL: ${BEST_GIFT_CATALOG_URL:-}
+      BEST_GIFT_CATALOG_TOKEN: ${BEST_GIFT_CATALOG_TOKEN:-}
     volumes:
       - gift-data:/data
     ports:

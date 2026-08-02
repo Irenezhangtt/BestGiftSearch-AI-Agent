@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 from typing import Literal
 from uuid import uuid4
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 
 class SearchRequest(BaseModel):
@@ -37,6 +37,13 @@ class Product(BaseModel):
     image: str
     merchant: str
     rating: float
+
+    @field_validator("url", "image")
+    @classmethod
+    def require_https(cls, value: str) -> str:
+        if not value.startswith("https://"):
+            raise ValueError("product links must use HTTPS")
+        return value
 
 
 class Recommendation(BaseModel):

@@ -32,6 +32,19 @@ uv run uvicorn best_gift_search.app:app --reload
 cd web && npm install && npm run dev
 ```
 
+### Optional live providers
+
+The default remains deterministic and requires no secrets. To enable the official OpenAI Responses API provider:
+
+```bash
+pip install '.[ai]'
+export OPENAI_API_KEY='...'
+export BEST_GIFT_MODEL_PROVIDER=openai
+export BEST_GIFT_OPENAI_MODEL=gpt-5.6-luna
+```
+
+The summary route uses the latency-oriented model role with reasoning explicitly set to `none`; provider errors or timeouts fall back to the deterministic summary. To connect an approved commerce service, set `BEST_GIFT_CATALOG_URL` to an HTTPS endpoint returning an array matching the `Product` schema, plus `BEST_GIFT_CATALOG_TOKEN` when required. Remote catalog calls use timeout, retry, circuit-breaker, and strict schema validation.
+
 ## API
 
 ```bash
