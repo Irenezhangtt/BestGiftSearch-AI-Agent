@@ -142,6 +142,8 @@ The browser then sends the prompt to the hosted FastAPI agents. The API key rema
 
 Set `BEST_GIFT_MODEL_PROVIDER=anthropic` and keep `ANTHROPIC_API_KEY` only in the backend environment to enable Claude-powered intent analysis. Claude converts vague language, relationship context, emotional tone, implicit needs, and exclusions into structured interests plus two or three category-diverse Google Shopping queries. The searches run concurrently, are merged and deduplicated, and then pass through the same strict budget and diversity ranking. If Claude is unavailable or returns invalid JSON, the deterministic parser takes over automatically.
 
+Multi-query retrieval keeps a balanced candidate quota from every Claude search direction. Final ranking first selects one eligible product per query direction, then fills remaining positions with new product categories before allowing repeats. Normalized-title deduplication removes near-identical listings sold by multiple merchants.
+
 ### Configuration reference
 
 Copy `.env.example` to `.env`; these are the main operational settings:

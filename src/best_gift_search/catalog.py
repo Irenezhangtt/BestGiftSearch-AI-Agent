@@ -19,7 +19,8 @@ PRODUCTS = [
 
 
 def tokenize(text: str) -> set[str]:
-    return set(re.findall(r"[a-z0-9]+", text.lower()))
+    stopwords = {"a", "an", "and", "for", "from", "gift", "items", "of", "or", "the", "to", "who", "with"}
+    return set(re.findall(r"[a-z0-9]+", text.lower())) - stopwords
 
 
 def retrieve(intent: SearchIntent, products: list[Product] | None = None, limit: int = 8) -> list[Product]:
@@ -31,7 +32,17 @@ def retrieve(intent: SearchIntent, products: list[Product] | None = None, limit:
         phrase = sum(0.08 for interest in intent.interests if interest in product.interests)
         afford = 0.25 if product.price <= intent.budget else -0.3
         return overlap + phrase + afford + product.rating / 100
-    return sorted(corpus, key=relevance, reverse=True)[:limit]
+    ordered = sorted(corpus, key=relevance, reverse=True)
+    groups = list(dict.fromkeys(product.search_group for product in ordered if product.search_group))
+    if len(groups) < 2:
+        return ordered[:limit]
+    balanced: list[Product] = []
+    buckets = {group: [product for product in ordered if product.search_group == group] for group in groups}
+    while len(balanced) < limit and any(buckets.values()):
+        for group in groups:
+            if buckets[group] and len(balanced) < limit:
+                balanced.append(buckets[group].pop(0))
+    return balanced
 
 
 def rank(products: list[Product], intent: SearchIntent, preferences: list[str]) -> list[Recommendation]:
@@ -58,7 +69,17 @@ def rank(products: list[Product], intent: SearchIntent, preferences: list[str]) 
     ordered = sorted(preferred or results, key=lambda item: (item.score, item.total_cost), reverse=True)
     selected: list[Recommendation] = []
     categories: set[str] = set()
+    groups: set[str] = set()
     for item in ordered:
+        group = item.product.search_group
+        if not group or group in groups:
+            continue
+        selected.append(item); groups.add(group); categories.add(item.product.category)
+        if len(selected) == 4:
+            return selected
+    for item in ordered:
+        if item in selected:
+            continue
         if item.product.category in categories:
             continue
         selected.append(item); categories.add(item.product.category)

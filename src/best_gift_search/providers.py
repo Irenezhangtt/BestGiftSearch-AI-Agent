@@ -51,17 +51,22 @@ class SerpApiCatalogProvider:
         client = self.client or httpx.AsyncClient(timeout=8)
         try:
             queries = list(dict.fromkeys([*intent.search_queries[:3], build_product_query(intent)]))[:3]
-            async def fetch(query: str):
+            async def fetch(query: str, group: int):
                 response = await client.get(self.endpoint, params={"engine": "google_shopping", "q": query, "gl": intent.country.lower(), "hl": "en", "api_key": self.api_key})
                 response.raise_for_status(); payload = response.json()
                 if payload.get("error"): raise RuntimeError(str(payload["error"]))
-                return payload.get("shopping_results") or payload.get("inline_shopping_results") or []
-            batches = await asyncio.gather(*(fetch(query) for query in queries), return_exceptions=True)
+                return [dict(item, _search_group=f"query-{group}") for item in (payload.get("shopping_results") or payload.get("inline_shopping_results") or [])]
+            batches = await asyncio.gather(*(fetch(query, group) for group, query in enumerate(queries)), return_exceptions=True)
             raw_products = [item for batch in batches if isinstance(batch, list) for item in batch]
             products = [product for item in raw_products if (product := self._convert(item, intent))]
             if not products:
                 raise RuntimeError("live shopping search returned no valid products")
-            return list({product.id: product for product in products}.values())[:100]
+            deduplicated: dict[str, Product] = {}
+            for product in products:
+                normalized = re.sub(r"\b(\d+|inch(?:es)?|pack|set|new)\b", "", product.name.lower())
+                normalized = re.sub(r"[^a-z0-9]+", " ", normalized).strip()[:100]
+                deduplicated.setdefault(normalized, product)
+            return list(deduplicated.values())[:100]
         finally:
             if owns_client:
                 await client.aclose()
@@ -91,12 +96,13 @@ class SerpApiCatalogProvider:
             ("educational kits", ["kit", "experiment", "stem", "robot", "telescope", "microscope", "puzzle", "game"]),
             ("books", ["book", "journal", "guide", "encyclopedia"]),
             ("art and decor", ["print", "poster", "art", "painting", "frame", "map"]),
-            ("electronics", ["electronic", "speaker", "headphone", "camera", "digital", "smart"]),
+            ("office accessories", ["desk", "ergonomic", "keyboard", "mouse", "office", "organizer", "laptop stand"]),
+            ("electronics", ["electronic", "speaker", "headphone", "camera", "digital", "smart", "noise machine", "earplug"]),
             ("toys", ["toy", "lego", "plush", "figure", "model"]),
             ("apparel", ["shirt", "hoodie", "sweater", "sock", "hat", "jacket"]),
             ("jewelry", ["necklace", "bracelet", "ring", "earring", "jewelry"]),
             ("food and drink", ["coffee", "tea", "chocolate", "snack", "food", "candy"]),
-            ("homeware", ["mug", "cup", "blanket", "lamp", "pillow", "bottle"]),
+            ("homeware", ["mug", "cup", "blanket", "lamp", "pillow", "bottle", "coffee maker", "tea infuser"]),
             ("outdoors", ["camp", "hiking", "outdoor", "picnic", "garden"]),
             ("stationery", ["pen", "notebook", "stationery", "card"]),
         ]
@@ -105,7 +111,7 @@ class SerpApiCatalogProvider:
             id=f"live-{product_id}", name=title[:180], description=description[:500],
             category=category, interests=matched_interests, price=price,
             shipping={intent.country: 0}, url=url, image=image, merchant=merchant,
-            rating=max(0, min(5, float(item.get("rating") or 4.0))),
+            rating=max(0, min(5, float(item.get("rating") or 4.0))), search_group=item.get("_search_group"),
         )
 
 

@@ -38,6 +38,7 @@ class Product(BaseModel):
     image: str
     merchant: str
     rating: float
+    search_group: str | None = None
 
     @field_validator("url", "image")
     @classmethod
