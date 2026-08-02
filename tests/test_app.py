@@ -215,6 +215,18 @@ def test_ranking_never_exceeds_budget_prefers_upper_half_and_diversifies():
     assert "over" not in {item.product.id for item in results}
 
 
+def test_retrieval_and_ranking_preserve_claude_query_directions():
+    from best_gift_search.catalog import rank, retrieve
+    def product(identifier, group, category, price=70):
+        return Product(id=identifier, name=f"Quality {category} {identifier}", description="work home comfort", category=category, interests=["comfort"], price=price, shipping={"US": 0}, url=f"https://shop.example/{identifier}", image=f"https://images.example/{identifier}.jpg", merchant="Shop", rating=4.5, search_group=group)
+    products = [product(f"noise-{index}", "query-0", "electronics", 95-index) for index in range(8)] + [product("desk", "query-1", "office accessories"), product("tea", "query-2", "homeware")]
+    intent = SearchIntent(interests=["comfort"], budget=100, search_queries=["noise", "desk", "tea"])
+    candidates = retrieve(intent, products, limit=10)
+    results = rank(candidates, intent, [])
+    assert {item.product.search_group for item in results} == {"query-0", "query-1", "query-2"}
+    assert len({item.product.category for item in results}) >= 3
+
+
 def test_product_links_require_https():
     with pytest.raises(ValueError):
         Product(id="bad", name="Bad", description="Unsafe link", category="test", interests=[], price=1, shipping={"US": 0}, url="javascript:alert(1)", image="https://example.com/image.jpg", merchant="Test", rating=1)
