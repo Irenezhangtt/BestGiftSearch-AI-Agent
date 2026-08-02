@@ -17,21 +17,71 @@ Best Gift Search is a runnable multi-agent gift discovery MVP inspired by the su
 - FastAPI REST/WebSocket API and React + Vite interface
 - Deterministic demo mode: no API keys or paid services required
 
-## Run locally
+## Choose how to view it
+
+| Goal | Best path | What you get |
+| --- | --- | --- |
+| See the visual result now | Open the hosted showcase (link below after deployment) | Responsive product cards, quality rubric, and agent-flow explanation |
+| Run the complete product | Docker Compose | React UI + FastAPI + WebSocket + SQLite |
+| Develop either layer | Native Python/Node setup | Hot reload and direct access to both services |
+
+The `site/` directory is a self-contained public showcase with clearly labelled example results. The `web/` directory is the real application UI and talks to the FastAPI service in `src/best_gift_search/`.
+
+## Quick start with Docker (recommended)
+
+Prerequisites: Docker Desktop with Compose v2 and ports `5173` and `8000` available.
 
 ```bash
+git clone https://github.com/Irenezhangtt/BestGiftSearch-AI-Agent.git
+cd BestGiftSearch-AI-Agent
 cp .env.example .env
 docker compose up --build
 ```
 
-Open <http://localhost:5173>. API docs are at <http://localhost:8000/docs>.
+Then open:
 
-Or run without Docker:
+- Web app: <http://localhost:5173>
+- Interactive API docs: <http://localhost:8000/docs>
+- Health check: <http://localhost:8000/health>
+
+Stop the stack with `Ctrl+C`, or run `docker compose down` from another terminal. SQLite data remains in the configured Docker volume.
+
+## Local development without Docker
+
+Prerequisites: Python 3.12+, [uv](https://docs.astral.sh/uv/), and Node.js 22+.
+
+Terminal 1 — backend:
 
 ```bash
+git clone https://github.com/Irenezhangtt/BestGiftSearch-AI-Agent.git
+cd BestGiftSearch-AI-Agent
+cp .env.example .env
 uv sync --extra dev
-uv run uvicorn best_gift_search.app:app --reload
-cd web && npm install && npm run dev
+uv run uvicorn best_gift_search.app:app --reload --host 0.0.0.0 --port 8000
+```
+
+Terminal 2 — frontend:
+
+```bash
+cd BestGiftSearch-AI-Agent/web
+npm install
+npm run dev
+```
+
+Open <http://localhost:5173>. The default configuration uses an in-repository deterministic catalog and summary provider, so the whole flow works without paid services or API keys.
+
+### Try the interface
+
+1. Describe a recipient, occasion, interests, destination country, and approximate budget.
+2. Select `US`, `CA`, or `GB`, then choose **Find gifts**.
+3. Watch the specialist-agent events appear while the search runs.
+4. Review landed costs, match reasons, caveats, and the automated quality rubric.
+5. Use **Yes/No** feedback; the signal is stored in SQLite and can influence later searches for the same browser user.
+
+Example prompt:
+
+```text
+A thoughtful birthday gift for my sister who loves coffee and travel, under $80
 ```
 
 ### Optional live providers
@@ -47,12 +97,38 @@ export BEST_GIFT_OPENAI_MODEL=gpt-5.6-luna
 
 The summary route uses the latency-oriented model role with reasoning explicitly set to `none`; provider errors or timeouts fall back to the deterministic summary. To connect an approved commerce service, set `BEST_GIFT_CATALOG_URL` to an HTTPS endpoint returning an array matching the `Product` schema, plus `BEST_GIFT_CATALOG_TOKEN` when required. Remote catalog calls use timeout, retry, circuit-breaker, and strict schema validation.
 
+### Configuration reference
+
+Copy `.env.example` to `.env`; these are the main operational settings:
+
+| Variable | Default/role |
+| --- | --- |
+| `BEST_GIFT_MODEL_PROVIDER` | `deterministic`; set to `openai` for live summaries |
+| `OPENAI_API_KEY` | Required only when the OpenAI provider is enabled |
+| `BEST_GIFT_OPENAI_MODEL` | Model used by the optional summary provider |
+| `BEST_GIFT_CATALOG_URL` | Optional HTTPS product-catalog endpoint |
+| `BEST_GIFT_CATALOG_TOKEN` | Optional server-side bearer token for that endpoint |
+| `BEST_GIFT_API_KEY` | Optional shared API key; clients then send `X-API-Key` |
+| `BEST_GIFT_RATE_LIMIT` | Per-client HTTP request limit for a one-minute window |
+| `BEST_GIFT_DATABASE_PATH` | SQLite file location |
+
+Do not expose provider tokens through Vite variables or commit them to Git. Production identity should be enforced at an OIDC-aware gateway; the shared API key is intended as a lightweight deployment control.
+
 ## API
 
 ```bash
 curl -X POST http://localhost:8000/api/search \
   -H 'content-type: application/json' \
   -d '{"message":"A thoughtful birthday gift for my sister who loves coffee and travel, under $80","country":"US"}'
+```
+
+The response includes the normalized intent, ranked recommendations, total landed cost, scoring reasons, an evaluation rubric, and the complete orchestration trace. A minimal response inspection looks like:
+
+```bash
+curl -s -X POST http://localhost:8000/api/search \
+  -H 'content-type: application/json' \
+  -d '{"message":"Gift for a coffee-loving traveler under $80","country":"US"}' \
+  | python -m json.tool
 ```
 
 Connect to `ws://localhost:8000/ws/{thread_id}` before submitting a search with the same `thread_id` to watch live agent events. Use `GET /api/threads/{thread_id}`, `GET /api/threads/{thread_id}/events`, `POST /api/threads/{thread_id}/feedback`, and `POST /api/threads/{thread_id}/cancel` for state, replay, learning signals, and cancellation. `GET /api/metrics` exposes lifecycle telemetry.
@@ -88,9 +164,33 @@ The default providers are deterministic so development and CI need no secrets. A
 
 ```bash
 uv run pytest
-cd web && npm run build
-python -m best_gift_search.eval_runner evaluations/gift_search.jsonl --minimum 55
+uv run python -m best_gift_search.eval_runner evaluations/gift_search.jsonl --minimum 55
+cd web && npm install && npm run build
+cd ../site && npm ci && npm test
 ```
+
+Expected baseline: all backend tests pass, all four deterministic evaluation cases pass the minimum score, and both web builds finish without TypeScript errors. GitHub Actions repeats the backend test, evaluator, and main frontend build on every push and pull request.
+
+## Repository map
+
+```text
+src/best_gift_search/   FastAPI routes, agent runtime, providers, guardrails, memory
+web/                    Live React/Vite client for the FastAPI service
+site/                   Deployable visual showcase (example data, no secrets)
+tests/                  API, job, guardrail, provider, and persistence tests
+evaluations/            Deterministic Rubrics-as-Rewards scenarios
+docs/ARCHITECTURE.md    Runtime design, data flow, and extension boundaries
+docs/OPERATIONS.md      Failure modes, observability, security, deployment checklist
+```
+
+## Troubleshooting
+
+- **Port already in use:** stop the process using `5173`/`8000`, or change the mapped Docker port and `VITE_API_URL` together.
+- **Frontend says “Live connection failed”:** confirm <http://localhost:8000/health> responds and that proxies allow WebSocket upgrades on `/ws/*`.
+- **401 from API:** either unset `BEST_GIFT_API_KEY` for local development or send the matching `X-API-Key` header.
+- **OpenAI/provider failure:** check the key and model settings. The app intentionally falls back to deterministic summaries after provider timeout/error.
+- **Stale local data:** stop the API and remove only the configured development SQLite file, then restart. Do not do this for production data.
+- **Remote products rejected:** ensure the catalog URL uses HTTPS and its JSON response matches the `Product` schema.
 
 ## Responsible recommendations
 
