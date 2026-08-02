@@ -138,6 +138,7 @@ async def test_model_provider_falls_back():
     result = await provider.summarize(SearchIntent(recipient="a friend"), 3)
     assert result.startswith("3 thoughtful matches")
     assert provider.fallback_count == 1
+    assert provider.last_error == "OSError: offline"
 
 
 @pytest.mark.asyncio

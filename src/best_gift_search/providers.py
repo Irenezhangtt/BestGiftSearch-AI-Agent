@@ -209,12 +209,14 @@ class FallbackModelProvider:
         self.fallback = fallback or DeterministicModelProvider()
         self.model = getattr(primary, "model", "configured")
         self.fallback_count = 0
+        self.last_error: str | None = None
 
     async def summarize(self, intent: SearchIntent, count: int) -> str:
         try:
             return await asyncio.wait_for(self.primary.summarize(intent, count), timeout=8)
-        except Exception:
+        except Exception as error:
             self.fallback_count += 1
+            self.last_error = f"{type(error).__name__}: {error}"[:300]
             return await self.fallback.summarize(intent, count)
 
     async def analyze(self, request: SearchRequest) -> SearchIntent | None:
@@ -222,8 +224,9 @@ class FallbackModelProvider:
         if analyzer is None: return None
         try:
             return await asyncio.wait_for(analyzer(request), timeout=18)
-        except Exception:
+        except Exception as error:
             self.fallback_count += 1
+            self.last_error = f"{type(error).__name__}: {error}"[:300]
             return None
 
 
