@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import re
+import time
 from collections.abc import Awaitable, Callable
 from uuid import uuid4
 
@@ -28,6 +29,7 @@ class AgentLoop:
         self.hooks = hooks or []
 
     async def run(self, request: SearchRequest, sink: EventSink) -> SearchResponse:
+        started_at = time.perf_counter()
         thread_id = request.thread_id or uuid4().hex
         events: list[AgentEvent] = []
         self.memory.begin_thread(thread_id, request.user_id)
@@ -49,12 +51,10 @@ class AgentLoop:
         await emit("act", "planner", "Forking recipient, catalog, and value specialists in parallel.")
 
         async def recipient_agent():
-            await asyncio.sleep(0.08)
             await emit("observe", "recipient", f"Gift profile: {intent.recipient}; interests: {', '.join(intent.interests) or 'open-ended'}.")
             return self.memory.preferences(thread_id, request.user_id)
 
         async def catalog_agent():
-            await asyncio.sleep(0.12)
             candidates = await self.catalog.search(intent)
             products = retrieve(intent, candidates, limit=24)
             source = getattr(self.catalog, "source_label", "configured commerce source")
@@ -62,7 +62,6 @@ class AgentLoop:
             return products
 
         async def value_agent():
-            await asyncio.sleep(0.1)
             await emit("observe", "value", f"Comparing delivered totals in {intent.currency} for {intent.country} under {intent.budget:.0f}.")
 
         preferences, products, _ = await asyncio.gather(recipient_agent(), catalog_agent(), value_agent())
@@ -72,7 +71,8 @@ class AgentLoop:
         await emit("complete", "planner", f"Selected {len(recommendations)} explainable gift ideas.")
         evaluation = evaluate(intent, recommendations)
         summary = await self.model.summarize(intent, len(recommendations))
-        response = SearchResponse(thread_id=thread_id, summary=summary, intent=intent, recommendations=recommendations, events=events, evaluation=evaluation)
+        search_time_ms = round((time.perf_counter() - started_at) * 1000)
+        response = SearchResponse(thread_id=thread_id, summary=summary, search_time_ms=search_time_ms, intent=intent, recommendations=recommendations, events=events, evaluation=evaluation)
         self.memory.save_response(response)
         return response
 

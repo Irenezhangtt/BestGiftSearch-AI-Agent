@@ -69,6 +69,7 @@ class AgentEvent(BaseModel):
 class SearchResponse(BaseModel):
     thread_id: str
     summary: str
+    search_time_ms: int = 0
     intent: SearchIntent
     recommendations: list[Recommendation]
     events: list[AgentEvent]

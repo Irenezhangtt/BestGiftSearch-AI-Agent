@@ -47,29 +47,25 @@ class SerpApiCatalogProvider:
 
     async def search(self, intent: SearchIntent) -> list[Product]:
         import httpx
-        owns_client = self.client is None
-        client = self.client or httpx.AsyncClient(timeout=8)
-        try:
-            queries = list(dict.fromkeys([*intent.search_queries[:3], build_product_query(intent)]))[:3]
-            async def fetch(query: str, group: int):
-                response = await client.get(self.endpoint, params={"engine": "google_shopping", "q": query, "gl": intent.country.lower(), "hl": "en", "api_key": self.api_key})
-                response.raise_for_status(); payload = response.json()
-                if payload.get("error"): raise RuntimeError(str(payload["error"]))
-                return [dict(item, _search_group=f"query-{group}") for item in (payload.get("shopping_results") or payload.get("inline_shopping_results") or [])]
-            batches = await asyncio.gather(*(fetch(query, group) for group, query in enumerate(queries)), return_exceptions=True)
-            raw_products = [item for batch in batches if isinstance(batch, list) for item in batch]
-            products = [product for item in raw_products if (product := self._convert(item, intent))]
-            if not products:
-                raise RuntimeError("live shopping search returned no valid products")
-            deduplicated: dict[str, Product] = {}
-            for product in products:
-                normalized = re.sub(r"\b(\d+|inch(?:es)?|pack|set|new)\b", "", product.name.lower())
-                normalized = re.sub(r"[^a-z0-9]+", " ", normalized).strip()[:100]
-                deduplicated.setdefault(normalized, product)
-            return list(deduplicated.values())[:100]
-        finally:
-            if owns_client:
-                await client.aclose()
+        if self.client is None:
+            self.client = httpx.AsyncClient(timeout=8)
+        queries = list(dict.fromkeys([*intent.search_queries[:3], build_product_query(intent)]))[:3]
+        async def fetch(query: str, group: int):
+            response = await self.client.get(self.endpoint, params={"engine": "google_shopping", "q": query, "gl": intent.country.lower(), "hl": "en", "api_key": self.api_key})
+            response.raise_for_status(); payload = response.json()
+            if payload.get("error"): raise RuntimeError(str(payload["error"]))
+            return [dict(item, _search_group=f"query-{group}") for item in (payload.get("shopping_results") or payload.get("inline_shopping_results") or [])]
+        batches = await asyncio.gather(*(fetch(query, group) for group, query in enumerate(queries)), return_exceptions=True)
+        raw_products = [item for batch in batches if isinstance(batch, list) for item in batch]
+        products = [product for item in raw_products if (product := self._convert(item, intent))]
+        if not products:
+            raise RuntimeError("live shopping search returned no valid products")
+        deduplicated: dict[str, Product] = {}
+        for product in products:
+            normalized = re.sub(r"\b(\d+|inch(?:es)?|pack|set|new)\b", "", product.name.lower())
+            normalized = re.sub(r"[^a-z0-9]+", " ", normalized).strip()[:100]
+            deduplicated.setdefault(normalized, product)
+        return list(deduplicated.values())[:100]
 
     @staticmethod
     def _convert(item: dict, intent: SearchIntent) -> Product | None:
@@ -156,15 +152,13 @@ class AnthropicModelProvider:
 
     async def _message(self, system: str, prompt: str, max_tokens: int) -> str:
         import httpx
-        owns_client = self.client is None; client = self.client or httpx.AsyncClient(timeout=15)
-        try:
-            response = await client.post(self.endpoint, headers={"x-api-key": self.api_key, "anthropic-version": "2023-06-01", "content-type": "application/json"}, json={"model": self.model, "max_tokens": max_tokens, "system": system, "messages": [{"role": "user", "content": prompt}]})
-            response.raise_for_status(); payload = response.json()
-            text = "".join(block.get("text", "") for block in payload.get("content", []) if block.get("type") == "text").strip()
-            if not text: raise RuntimeError("Anthropic returned no text")
-            return text
-        finally:
-            if owns_client: await client.aclose()
+        if self.client is None:
+            self.client = httpx.AsyncClient(timeout=15)
+        response = await self.client.post(self.endpoint, headers={"x-api-key": self.api_key, "anthropic-version": "2023-06-01", "content-type": "application/json"}, json={"model": self.model, "max_tokens": max_tokens, "system": system, "messages": [{"role": "user", "content": prompt}]})
+        response.raise_for_status(); payload = response.json()
+        text = "".join(block.get("text", "") for block in payload.get("content", []) if block.get("type") == "text").strip()
+        if not text: raise RuntimeError("Anthropic returned no text")
+        return text
 
     async def analyze(self, request: SearchRequest) -> SearchIntent:
         system = """Analyze a gift-shopping request. Return only one JSON object with keys recipient, occasion, interests, exclusions, budget, and search_queries. Resolve vague emotional language into concrete shopping concepts. search_queries must contain 2 or 3 diverse Google Shopping queries covering different product categories, preserving recipient and occasion and excluding unwanted concepts. No prose or markdown."""
@@ -175,8 +169,8 @@ class AnthropicModelProvider:
         return SearchIntent(recipient=str(data.get("recipient") or "someone special")[:80], occasion=str(data.get("occasion") or "gift")[:80], interests=[str(x)[:80] for x in data.get("interests", [])][:12], exclusions=[str(x)[:80] for x in data.get("exclusions", [])][:12], search_queries=[str(x)[:180] for x in data.get("search_queries", [])][:3], budget=float(data.get("budget") or 100), country=request.country.upper(), currency=request.currency.upper())
 
     async def summarize(self, intent: SearchIntent, count: int) -> str:
-        prompt = f"Recipient: {intent.recipient}; occasion: {intent.occasion}; interests: {', '.join(intent.interests) or 'open'}; budget: {intent.currency} {intent.budget:.0f}; results: {count}."
-        return (await self._message("Write one concise, warm gift-search results heading. Output only the heading.", prompt, 100))[:280]
+        focus = ", ".join(intent.interests[:2]) if intent.interests else "their unique style"
+        return f"{count} best-matching {intent.occasion} gifts for {intent.recipient}, inspired by {focus}."[:280]
 
 
 class OpenAIResponsesModelProvider:

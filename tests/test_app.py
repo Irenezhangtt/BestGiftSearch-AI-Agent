@@ -50,6 +50,7 @@ def test_search_returns_ranked_affordable_gifts(tmp_path: Path):
     assert body["intent"]["budget"] == 80
     assert body["recommendations"][0]["product"]["id"] == "coffee-kit"
     assert body["events"][-1]["phase"] == "complete"
+    assert body["search_time_ms"] >= 0
     assert body["evaluation"]["overall"] > 0
     assert app_module.memory.events(body["thread_id"])
 
@@ -158,6 +159,7 @@ async def test_anthropic_provider_extracts_fuzzy_intent_and_queries():
     assert intent.exclusions == ["cheesy"]
     assert len(intent.search_queries) == 3
     assert "home office" in intent.interests
+    assert (await provider.summarize(intent, 4)).startswith("4 best-matching birthday gifts")
 
 
 @pytest.mark.asyncio
