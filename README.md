@@ -123,7 +123,7 @@ prompt → structured recipient/occasion/interests/exclusions/budget
 
 The live adapter maps the shopping response into the normal `Product` model, including the current title, price, thumbnail, merchant, rating, and HTTPS shopping link. It supports country targeting and negative search terms. If the shopping service is unavailable, the API records a fallback and uses the local catalog instead of failing the whole request.
 
-Live shopping requests use a price band from 50% to 100% of the stated budget. The server enforces the maximum again after shipping, so an over-budget item can never enter the final shortlist. Ranking favors products closer to the budget and selects distinct inferred categories before filling any remaining positions; for example, an `under $80` request prioritizes products from `$40–$80` across different gift types.
+Live shopping retrieves a broad candidate set, then prioritizes a price band from 50% to 100% of the stated budget. The server enforces the maximum after shipping, so an over-budget item can never enter the final shortlist. Ranking favors products closer to the budget and selects distinct inferred categories before filling any remaining positions; for example, an `under $80` request prioritizes products from `$40–$80` across different gift types. Applying the band locally preserves useful lower-priced fallbacks when a marketplace has too few candidates in the preferred range.
 
 Never put `SERPAPI_API_KEY` in `VITE_*`, frontend code, or a GitHub Pages variable. Vite values are public browser code. Store the key only in the backend hosting service.
 

@@ -156,8 +156,8 @@ async def test_live_shopping_provider_builds_semantic_query_and_maps_products():
             assert "birthday gift for son science" in params["q"]
             assert "-coffee" in params["q"]
             assert params["gl"] == "us"
-            assert params["min_price"] == 30
-            assert params["max_price"] == 60
+            assert "min_price" not in params
+            assert "max_price" not in params
             return Response()
     intent = SearchIntent(recipient="son", occasion="birthday", interests=["science"], exclusions=["coffee"], budget=60)
     products = await SerpApiCatalogProvider("secret", client=Client()).search(intent)
