@@ -138,6 +138,10 @@ Never put `SERPAPI_API_KEY` in `VITE_*`, frontend code, or a GitHub Pages variab
 
 The browser then sends the prompt to the hosted FastAPI agents. The API key remains private on the server, while real product cards and outbound merchant links appear on GitHub Pages.
 
+### Claude semantic search
+
+Set `BEST_GIFT_MODEL_PROVIDER=anthropic` and keep `ANTHROPIC_API_KEY` only in the backend environment to enable Claude-powered intent analysis. Claude converts vague language, relationship context, emotional tone, implicit needs, and exclusions into structured interests plus two or three category-diverse Google Shopping queries. The searches run concurrently, are merged and deduplicated, and then pass through the same strict budget and diversity ranking. If Claude is unavailable or returns invalid JSON, the deterministic parser takes over automatically.
+
 ### Configuration reference
 
 Copy `.env.example` to `.env`; these are the main operational settings:
@@ -147,6 +151,8 @@ Copy `.env.example` to `.env`; these are the main operational settings:
 | `BEST_GIFT_MODEL_PROVIDER` | `deterministic`; set to `openai` for live summaries |
 | `OPENAI_API_KEY` | Required only when the OpenAI provider is enabled |
 | `BEST_GIFT_OPENAI_MODEL` | Model used by the optional summary provider |
+| `ANTHROPIC_API_KEY` | Enables Claude semantic analysis; backend secret only |
+| `BEST_GIFT_ANTHROPIC_MODEL` | Claude model ID; defaults to `claude-sonnet-4-20250514` |
 | `SERPAPI_API_KEY` | Enables dynamic Google Shopping product retrieval on the backend |
 | `BEST_GIFT_API_URL` | GitHub Actions variable used by Pages to call the hosted backend |
 | `BEST_GIFT_CATALOG_URL` | Optional HTTPS product-catalog endpoint |

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
+import json
 import os
 import re
 import time
@@ -9,7 +10,7 @@ from dataclasses import dataclass
 from typing import Protocol, TypeVar
 
 from .catalog import PRODUCTS
-from .models import Product, SearchIntent
+from .models import Product, SearchIntent, SearchRequest
 
 
 class CatalogProvider(Protocol):
@@ -49,22 +50,18 @@ class SerpApiCatalogProvider:
         owns_client = self.client is None
         client = self.client or httpx.AsyncClient(timeout=8)
         try:
-            response = await client.get(self.endpoint, params={
-                "engine": "google_shopping",
-                "q": build_product_query(intent),
-                "gl": intent.country.lower(),
-                "hl": "en",
-                "api_key": self.api_key,
-            })
-            response.raise_for_status()
-            payload = response.json()
-            if payload.get("error"):
-                raise RuntimeError(str(payload["error"]))
-            raw_products = payload.get("shopping_results") or payload.get("inline_shopping_results") or []
+            queries = list(dict.fromkeys([*intent.search_queries[:3], build_product_query(intent)]))[:3]
+            async def fetch(query: str):
+                response = await client.get(self.endpoint, params={"engine": "google_shopping", "q": query, "gl": intent.country.lower(), "hl": "en", "api_key": self.api_key})
+                response.raise_for_status(); payload = response.json()
+                if payload.get("error"): raise RuntimeError(str(payload["error"]))
+                return payload.get("shopping_results") or payload.get("inline_shopping_results") or []
+            batches = await asyncio.gather(*(fetch(query) for query in queries), return_exceptions=True)
+            raw_products = [item for batch in batches if isinstance(batch, list) for item in batch]
             products = [product for item in raw_products if (product := self._convert(item, intent))]
             if not products:
                 raise RuntimeError("live shopping search returned no valid products")
-            return products[:40]
+            return list({product.id: product for product in products}.values())[:100]
         finally:
             if owns_client:
                 await client.aclose()
@@ -142,6 +139,40 @@ class DeterministicModelProvider:
         return f"{count} thoughtful matches for {intent.recipient}, balanced for meaning, quality, and delivered cost."
 
 
+class AnthropicModelProvider:
+    """Claude-powered fuzzy intent extraction, query expansion, and summaries."""
+
+    endpoint = "https://api.anthropic.com/v1/messages"
+
+    def __init__(self, api_key: str, model: str | None = None, client=None):
+        if not api_key: raise ValueError("ANTHROPIC_API_KEY is required")
+        self.api_key, self.model, self.client = api_key, model or os.getenv("BEST_GIFT_ANTHROPIC_MODEL", "claude-sonnet-4-20250514"), client
+
+    async def _message(self, system: str, prompt: str, max_tokens: int) -> str:
+        import httpx
+        owns_client = self.client is None; client = self.client or httpx.AsyncClient(timeout=15)
+        try:
+            response = await client.post(self.endpoint, headers={"x-api-key": self.api_key, "anthropic-version": "2023-06-01", "content-type": "application/json"}, json={"model": self.model, "max_tokens": max_tokens, "system": system, "messages": [{"role": "user", "content": prompt}]})
+            response.raise_for_status(); payload = response.json()
+            text = "".join(block.get("text", "") for block in payload.get("content", []) if block.get("type") == "text").strip()
+            if not text: raise RuntimeError("Anthropic returned no text")
+            return text
+        finally:
+            if owns_client: await client.aclose()
+
+    async def analyze(self, request: SearchRequest) -> SearchIntent:
+        system = """Analyze a gift-shopping request. Return only one JSON object with keys recipient, occasion, interests, exclusions, budget, and search_queries. Resolve vague emotional language into concrete shopping concepts. search_queries must contain 2 or 3 diverse Google Shopping queries covering different product categories, preserving recipient and occasion and excluding unwanted concepts. No prose or markdown."""
+        raw = await self._message(system, f"Request: {request.message}\nCountry: {request.country}\nCurrency: {request.currency}", 600)
+        match = re.search(r"\{.*\}", raw, re.DOTALL)
+        if not match: raise RuntimeError("Anthropic intent response was not JSON")
+        data = json.loads(match.group(0))
+        return SearchIntent(recipient=str(data.get("recipient") or "someone special")[:80], occasion=str(data.get("occasion") or "gift")[:80], interests=[str(x)[:80] for x in data.get("interests", [])][:12], exclusions=[str(x)[:80] for x in data.get("exclusions", [])][:12], search_queries=[str(x)[:180] for x in data.get("search_queries", [])][:3], budget=float(data.get("budget") or 100), country=request.country.upper(), currency=request.currency.upper())
+
+    async def summarize(self, intent: SearchIntent, count: int) -> str:
+        prompt = f"Recipient: {intent.recipient}; occasion: {intent.occasion}; interests: {', '.join(intent.interests) or 'open'}; budget: {intent.currency} {intent.budget:.0f}; results: {count}."
+        return (await self._message("Write one concise, warm gift-search results heading. Output only the heading.", prompt, 100))[:280]
+
+
 class OpenAIResponsesModelProvider:
     """Low-latency summary provider using the OpenAI Responses API."""
 
@@ -186,6 +217,15 @@ class FallbackModelProvider:
             self.fallback_count += 1
             return await self.fallback.summarize(intent, count)
 
+    async def analyze(self, request: SearchRequest) -> SearchIntent | None:
+        analyzer = getattr(self.primary, "analyze", None)
+        if analyzer is None: return None
+        try:
+            return await asyncio.wait_for(analyzer(request), timeout=18)
+        except Exception:
+            self.fallback_count += 1
+            return None
+
 
 class HttpCatalogProvider:
     """Adapter for an approved commerce/search service returning Product JSON."""
@@ -217,7 +257,7 @@ T = TypeVar("T")
 
 @dataclass
 class ProviderPolicy:
-    timeout_seconds: float = 5
+    timeout_seconds: float = 15
     retries: int = 2
     failure_threshold: int = 3
     reset_seconds: float = 30

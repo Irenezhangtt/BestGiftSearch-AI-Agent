@@ -8,6 +8,10 @@ services:
       - key: BEST_GIFT_CORS
         value: https://irenezhangtt.github.io
       - key: BEST_GIFT_MODEL_PROVIDER
-        value: deterministic
+        value: anthropic
+      - key: BEST_GIFT_ANTHROPIC_MODEL
+        value: claude-sonnet-4-20250514
+      - key: ANTHROPIC_API_KEY
+        sync: false
       - key: SERPAPI_API_KEY
         sync: false

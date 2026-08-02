@@ -13,7 +13,7 @@ from best_gift_search.guardrails import UnsafeInput, sanitize_message
 from best_gift_search.models import Product, SearchIntent, SearchRequest
 from best_gift_search.models import JobStatus
 from best_gift_search.middleware import ProductionMiddleware
-from best_gift_search.providers import FallbackCatalogProvider, FallbackModelProvider, OpenAIResponsesModelProvider, SerpApiCatalogProvider, build_product_query
+from best_gift_search.providers import AnthropicModelProvider, FallbackCatalogProvider, FallbackModelProvider, OpenAIResponsesModelProvider, SerpApiCatalogProvider, build_product_query
 from best_gift_search.settings import Settings
 
 
@@ -138,6 +138,25 @@ async def test_model_provider_falls_back():
     result = await provider.summarize(SearchIntent(recipient="a friend"), 3)
     assert result.startswith("3 thoughtful matches")
     assert provider.fallback_count == 1
+
+
+@pytest.mark.asyncio
+async def test_anthropic_provider_extracts_fuzzy_intent_and_queries():
+    class Response:
+        def raise_for_status(self): pass
+        def json(self):
+            return {"content": [{"type": "text", "text": '{"recipient":"quiet boyfriend","occasion":"birthday","interests":["minimalist design","home office","quiet hobbies"],"exclusions":["cheesy"],"budget":100,"search_queries":["minimalist premium desk gift boyfriend","quiet hobby gift set adult","subtle personalized home office gift"]}'}]}
+    class Client:
+        async def post(self, url, headers, json):
+            assert headers["anthropic-version"] == "2023-06-01"
+            assert json["model"] == "claude-sonnet-4-20250514"
+            return Response()
+    provider = AnthropicModelProvider("secret", client=Client())
+    intent = await provider.analyze(SearchRequest(message="Something meaningful but not cheesy for my quiet boyfriend who works from home, under $100"))
+    assert intent.recipient == "quiet boyfriend"
+    assert intent.exclusions == ["cheesy"]
+    assert len(intent.search_queries) == 3
+    assert "home office" in intent.interests
 
 
 @pytest.mark.asyncio

@@ -5,7 +5,7 @@ import os
 from .agents import AgentLoop
 from .hooks import AgentHook
 from .memory import MemoryStore
-from .providers import DemoCatalogProvider, DeterministicModelProvider, FallbackCatalogProvider, FallbackModelProvider, HttpCatalogProvider, OpenAIResponsesModelProvider, ResilientCatalogProvider, SerpApiCatalogProvider
+from .providers import AnthropicModelProvider, DemoCatalogProvider, DeterministicModelProvider, FallbackCatalogProvider, FallbackModelProvider, HttpCatalogProvider, OpenAIResponsesModelProvider, ResilientCatalogProvider, SerpApiCatalogProvider
 
 
 def build_agent_loop(memory: MemoryStore, hooks: list[AgentHook] | None = None) -> AgentLoop:
@@ -18,8 +18,12 @@ def build_agent_loop(memory: MemoryStore, hooks: list[AgentHook] | None = None) 
     else:
         catalog = DemoCatalogProvider()
     selection = os.getenv("BEST_GIFT_MODEL_PROVIDER", "auto").lower()
-    use_openai = selection == "openai" or (selection == "auto" and bool(os.getenv("OPENAI_API_KEY")))
-    model = FallbackModelProvider(OpenAIResponsesModelProvider()) if use_openai else DeterministicModelProvider()
+    anthropic_key = os.getenv("ANTHROPIC_API_KEY")
+    use_anthropic = bool(anthropic_key) and selection in {"auto", "anthropic", "claude"}
+    use_openai = selection == "openai" or (selection == "auto" and not use_anthropic and bool(os.getenv("OPENAI_API_KEY")))
+    if use_anthropic: model = FallbackModelProvider(AnthropicModelProvider(anthropic_key))
+    elif use_openai: model = FallbackModelProvider(OpenAIResponsesModelProvider())
+    else: model = DeterministicModelProvider()
     return AgentLoop(memory, catalog=catalog, model=model, hooks=hooks)
 
 
