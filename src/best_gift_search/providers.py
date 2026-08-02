@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import os
+import re
 import time
 from dataclasses import dataclass
 from typing import Protocol, TypeVar
@@ -17,8 +19,100 @@ class CatalogProvider(Protocol):
 
 
 class DemoCatalogProvider:
+    source_label = "offline fallback catalog"
+
     async def search(self, intent: SearchIntent) -> list[Product]:
         return list(PRODUCTS)
+
+
+def build_product_query(intent: SearchIntent) -> str:
+    """Turn structured gift intent into a marketplace-friendly search query."""
+    parts = [intent.occasion if intent.occasion != "gift" else "", "gift", f"for {intent.recipient}", *intent.interests]
+    if intent.exclusions:
+        parts.extend(f"-{term}" for term in intent.exclusions)
+    return " ".join(part for part in parts if part).strip()
+
+
+class SerpApiCatalogProvider:
+    """Live Google Shopping adapter returning real products from across the web."""
+
+    source_label = "live Google Shopping results"
+    endpoint = "https://serpapi.com/search.json"
+
+    def __init__(self, api_key: str, client=None):
+        if not api_key:
+            raise ValueError("SERPAPI_API_KEY is required")
+        self.api_key, self.client = api_key, client
+
+    async def search(self, intent: SearchIntent) -> list[Product]:
+        import httpx
+        owns_client = self.client is None
+        client = self.client or httpx.AsyncClient(timeout=8)
+        try:
+            response = await client.get(self.endpoint, params={
+                "engine": "google_shopping",
+                "q": build_product_query(intent),
+                "gl": intent.country.lower(),
+                "hl": "en",
+                "api_key": self.api_key,
+            })
+            response.raise_for_status()
+            payload = response.json()
+            if payload.get("error"):
+                raise RuntimeError(str(payload["error"]))
+            raw_products = payload.get("shopping_results") or payload.get("inline_shopping_results") or []
+            products = [product for item in raw_products if (product := self._convert(item, intent))]
+            if not products:
+                raise RuntimeError("live shopping search returned no valid products")
+            return products[:40]
+        finally:
+            if owns_client:
+                await client.aclose()
+
+    @staticmethod
+    def _convert(item: dict, intent: SearchIntent) -> Product | None:
+        title = str(item.get("title") or "").strip()
+        url = str(item.get("link") or item.get("product_link") or "").strip()
+        image = str(item.get("thumbnail") or item.get("serpapi_thumbnail") or "").strip()
+        extracted = item.get("extracted_price")
+        if extracted is None:
+            match = re.search(r"\d[\d,]*(?:\.\d+)?", str(item.get("price") or ""))
+            extracted = match.group(0).replace(",", "") if match else None
+        try:
+            price = float(extracted)
+        except (TypeError, ValueError):
+            return None
+        if not title or not url.startswith("https://") or not image.startswith("https://"):
+            return None
+        merchant = str(item.get("source") or item.get("seller") or "Google Shopping merchant")[:120]
+        extensions = item.get("extensions") if isinstance(item.get("extensions"), list) else []
+        description = " · ".join(str(value) for value in extensions[:3]) or f"Available from {merchant}; price and availability may change."
+        product_id = str(item.get("product_id") or hashlib.sha256(f"{title}|{url}".encode()).hexdigest()[:20])
+        return Product(
+            id=f"live-{product_id}", name=title[:180], description=description[:500],
+            category="live-shopping", interests=list(intent.interests), price=price,
+            shipping={intent.country: 0}, url=url, image=image, merchant=merchant,
+            rating=max(0, min(5, float(item.get("rating") or 4.0))),
+        )
+
+
+class FallbackCatalogProvider:
+    """Use the local catalog only when the configured live source is unavailable."""
+
+    def __init__(self, primary: CatalogProvider, fallback: CatalogProvider | None = None):
+        self.primary, self.fallback = primary, fallback or DemoCatalogProvider()
+        self.fallback_count = 0
+
+    @property
+    def source_label(self) -> str:
+        return getattr(self.primary, "source_label", "live commerce search")
+
+    async def search(self, intent: SearchIntent) -> list[Product]:
+        try:
+            return await self.primary.search(intent)
+        except Exception:
+            self.fallback_count += 1
+            return await self.fallback.search(intent)
 
 
 class ModelProvider(Protocol):

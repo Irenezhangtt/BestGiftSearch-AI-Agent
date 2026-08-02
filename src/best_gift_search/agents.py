@@ -55,7 +55,8 @@ class AgentLoop:
             await asyncio.sleep(0.12)
             candidates = await self.catalog.search(intent)
             products = retrieve(intent, candidates)
-            await emit("observe", "catalog", f"Retrieved {len(products)} diverse candidates from the global demo catalog.")
+            source = getattr(self.catalog, "source_label", "configured commerce source")
+            await emit("observe", "catalog", f"Retrieved {len(products)} diverse candidates from {source}.")
             return products
 
         async def value_agent():

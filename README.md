@@ -18,6 +18,7 @@ Best Gift Search is a runnable multi-agent gift discovery MVP inspired by the su
 - SQLite-persisted job state and compact replay context for restart-safe operations
 - FastAPI REST/WebSocket API and React + Vite interface
 - Deterministic demo mode: no API keys or paid services required
+- Optional live Google Shopping retrieval: prompt-derived queries return current products, images, prices, merchants, and outbound links
 
 ## Choose how to view it
 
@@ -108,6 +109,33 @@ export BEST_GIFT_OPENAI_MODEL=gpt-5.6-luna
 
 The summary route uses the latency-oriented model role with reasoning explicitly set to `none`; provider errors or timeouts fall back to the deterministic summary. To connect an approved commerce service, set `BEST_GIFT_CATALOG_URL` to an HTTPS endpoint returning an array matching the `Product` schema, plus `BEST_GIFT_CATALOG_TOKEN` when required. Remote catalog calls use timeout, retry, circuit-breaker, and strict schema validation.
 
+### Dynamic product search from the web
+
+The 16 browser-demo products are an offline fallback, not the production search boundary. When `SERPAPI_API_KEY` is present on the API server, each request follows this live path:
+
+```text
+prompt → structured recipient/occasion/interests/exclusions/budget
+       → dynamic Google Shopping query
+       → up to 40 current web products
+       → relevance, delivered-cost, rating, and diversity ranking
+       → four explained recommendations in the website
+```
+
+The live adapter maps the shopping response into the normal `Product` model, including the current title, price, thumbnail, merchant, rating, and HTTPS shopping link. It supports country targeting and negative search terms. If the shopping service is unavailable, the API records a fallback and uses the local catalog instead of failing the whole request.
+
+Never put `SERPAPI_API_KEY` in `VITE_*`, frontend code, or a GitHub Pages variable. Vite values are public browser code. Store the key only in the backend hosting service.
+
+#### Connect the GitHub Pages site to live search
+
+1. Create a [SerpApi](https://serpapi.com/) account and copy its private API key.
+2. Deploy this repository's `render.yaml` as a Render Blueprint.
+3. In Render, set `SERPAPI_API_KEY` to the private key. The blueprint already sets the GitHub Pages CORS origin and `/health` check.
+4. Confirm `https://YOUR-BACKEND.example/health` reports `catalog_source` as `live Google Shopping results`.
+5. In GitHub, open **Settings → Secrets and variables → Actions → Variables** and create `BEST_GIFT_API_URL` with the backend origin, without a trailing slash.
+6. Run the **deploy-github-pages** workflow again. It automatically disables offline demo mode when `BEST_GIFT_API_URL` exists.
+
+The browser then sends the prompt to the hosted FastAPI agents. The API key remains private on the server, while real product cards and outbound merchant links appear on GitHub Pages.
+
 ### Configuration reference
 
 Copy `.env.example` to `.env`; these are the main operational settings:
@@ -117,6 +145,8 @@ Copy `.env.example` to `.env`; these are the main operational settings:
 | `BEST_GIFT_MODEL_PROVIDER` | `deterministic`; set to `openai` for live summaries |
 | `OPENAI_API_KEY` | Required only when the OpenAI provider is enabled |
 | `BEST_GIFT_OPENAI_MODEL` | Model used by the optional summary provider |
+| `SERPAPI_API_KEY` | Enables dynamic Google Shopping product retrieval on the backend |
+| `BEST_GIFT_API_URL` | GitHub Actions variable used by Pages to call the hosted backend |
 | `BEST_GIFT_CATALOG_URL` | Optional HTTPS product-catalog endpoint |
 | `BEST_GIFT_CATALOG_TOKEN` | Optional server-side bearer token for that endpoint |
 | `BEST_GIFT_API_KEY` | Optional shared API key; clients then send `X-API-Key` |

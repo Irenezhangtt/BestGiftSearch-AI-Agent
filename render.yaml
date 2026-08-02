@@ -1,0 +1,13 @@
+services:
+  - type: web
+    name: best-gift-search-api
+    runtime: docker
+    plan: free
+    healthCheckPath: /health
+    envVars:
+      - key: BEST_GIFT_CORS
+        value: https://irenezhangtt.github.io
+      - key: BEST_GIFT_MODEL_PROVIDER
+        value: deterministic
+      - key: SERPAPI_API_KEY
+        sync: false

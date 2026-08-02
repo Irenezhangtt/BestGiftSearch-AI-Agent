@@ -13,7 +13,7 @@ from best_gift_search.guardrails import UnsafeInput, sanitize_message
 from best_gift_search.models import Product, SearchIntent
 from best_gift_search.models import JobStatus
 from best_gift_search.middleware import ProductionMiddleware
-from best_gift_search.providers import FallbackModelProvider, OpenAIResponsesModelProvider
+from best_gift_search.providers import FallbackCatalogProvider, FallbackModelProvider, OpenAIResponsesModelProvider, SerpApiCatalogProvider, build_product_query
 from best_gift_search.settings import Settings
 
 
@@ -121,6 +121,43 @@ async def test_model_provider_falls_back():
     provider = FallbackModelProvider(Broken())
     result = await provider.summarize(SearchIntent(recipient="a friend"), 3)
     assert result.startswith("3 thoughtful matches")
+    assert provider.fallback_count == 1
+
+
+@pytest.mark.asyncio
+async def test_live_shopping_provider_builds_semantic_query_and_maps_products():
+    class Response:
+        def raise_for_status(self): pass
+        def json(self):
+            return {"shopping_results": [{
+                "product_id": "sku-1", "title": "Beginner Telescope Kit", "extracted_price": 49.99,
+                "source": "Science Store", "rating": 4.8, "thumbnail": "https://images.example/telescope.jpg",
+                "product_link": "https://shop.example/telescope", "extensions": ["Free delivery"],
+            }]}
+    class Client:
+        async def get(self, url, params):
+            assert params["engine"] == "google_shopping"
+            assert "birthday gift for son science" in params["q"]
+            assert "-coffee" in params["q"]
+            assert params["gl"] == "us"
+            return Response()
+    intent = SearchIntent(recipient="son", occasion="birthday", interests=["science"], exclusions=["coffee"], budget=60)
+    products = await SerpApiCatalogProvider("secret", client=Client()).search(intent)
+    assert products[0].name == "Beginner Telescope Kit"
+    assert products[0].price == 49.99
+    assert products[0].merchant == "Science Store"
+    assert products[0].url == "https://shop.example/telescope"
+    assert build_product_query(intent) == "birthday gift for son science -coffee"
+
+
+@pytest.mark.asyncio
+async def test_live_catalog_uses_offline_products_only_on_failure():
+    class Broken:
+        source_label = "live search"
+        async def search(self, intent): raise OSError("offline")
+    provider = FallbackCatalogProvider(Broken())
+    products = await provider.search(SearchIntent(interests=["coffee"]))
+    assert products == PRODUCTS
     assert provider.fallback_count == 1
 
 
