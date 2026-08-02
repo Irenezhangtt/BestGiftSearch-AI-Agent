@@ -54,8 +54,6 @@ class SerpApiCatalogProvider:
                 "q": build_product_query(intent),
                 "gl": intent.country.lower(),
                 "hl": "en",
-                "min_price": round(intent.budget * 0.5, 2),
-                "max_price": round(intent.budget, 2),
                 "api_key": self.api_key,
             })
             response.raise_for_status()
