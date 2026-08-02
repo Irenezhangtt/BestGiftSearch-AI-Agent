@@ -54,7 +54,8 @@ def rank(products: list[Product], intent: SearchIntent, preferences: list[str]) 
         score = round(100 * (0.45 * interest_score + 0.35 * budget_score + 0.2 * product.rating / 5), 1)
         reasons = ([f"Matches {', '.join(matches)}"] if matches else ["A versatile, well-reviewed gift"]) + [f"{intent.currency} {total:.0f} delivered", f"Rated {product.rating}/5"]
         results.append(Recommendation(product=product, shipping_cost=shipping, total_cost=total, score=max(0, score), reasons=reasons, caveat=None))
-    ordered = sorted(results, key=lambda item: (item.total_cost >= price_floor, item.score, item.total_cost), reverse=True)
+    preferred = [item for item in results if item.total_cost >= price_floor]
+    ordered = sorted(preferred or results, key=lambda item: (item.score, item.total_cost), reverse=True)
     selected: list[Recommendation] = []
     categories: set[str] = set()
     for item in ordered:
