@@ -12,6 +12,8 @@ Best Gift Search is a runnable multi-agent gift discovery MVP inspired by the su
 - Rubrics-as-Rewards evaluation for relevance, budget fit, diversity, and explainability
 - Prompt-injection screening, Unicode normalization, and resilient provider wrappers
 - Cross-thread user preference memory plus asynchronous job status and cancellation APIs
+- Optional API-key enforcement, per-client rate limiting, request IDs, security headers, and structured access logs
+- SQLite-persisted job state and compact replay context for restart-safe operations
 - FastAPI REST/WebSocket API and React + Vite interface
 - Deterministic demo mode: no API keys or paid services required
 
@@ -57,6 +59,8 @@ Connect to `ws://localhost:8000/ws/{thread_id}` before submitting a search with 
 
 For durable/background-style execution, create a task with `POST /api/jobs`, poll `GET /api/jobs/{job_id}`, or cancel it with `DELETE /api/jobs/{job_id}`. The in-process job registry is suitable for a single API process; production multi-worker deployments should replace it with Redis/Celery, Dramatiq, or a managed queue.
 
+`GET /api/threads/{thread_id}/context` returns the latest compact checkpoint and a bounded recent event window. Jobs are persisted in SQLite; any job left queued or running during a process restart is recovered as failed rather than remaining stuck. Set `BEST_GIFT_API_KEY` to protect HTTP `/api/*` routes with `X-API-Key`, and tune `BEST_GIFT_RATE_LIMIT` for the per-client one-minute window. For end-user production authentication, replace the shared-key gate with an identity-aware gateway or OIDC middleware.
+
 ## Architecture
 
 ```text
@@ -73,6 +77,8 @@ React/Vite UI ── REST + WebSocket ── FastAPI
 ```
 
 The catalog and model interfaces in `providers.py` are provider-neutral. Production adapters can connect marketplace/search APIs and a LangChain-compatible model without changing the public API. Retrieval combines lexical overlap, explicit interest matches, affordability, and rating; a vector database can sit behind the catalog provider. Hooks offer a small HarnessMiddleware-style lifecycle surface, while SQLite checkpoints preserve compact state after intent parsing and reranking.
+
+See [Architecture](docs/ARCHITECTURE.md) for runtime boundaries and [Operations](docs/OPERATIONS.md) for failure behavior, deployment guidance, and the production checklist.
 
 ## Production integration boundary
 

@@ -2,6 +2,7 @@ from pathlib import Path
 import time
 import pytest
 
+from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from best_gift_search import app as app_module
@@ -9,6 +10,8 @@ from best_gift_search.agents import AgentLoop
 from best_gift_search.memory import MemoryStore
 from best_gift_search.guardrails import UnsafeInput, sanitize_message
 from best_gift_search.models import Product, SearchIntent
+from best_gift_search.models import JobStatus
+from best_gift_search.middleware import ProductionMiddleware
 from best_gift_search.providers import FallbackModelProvider, OpenAIResponsesModelProvider
 
 
@@ -74,6 +77,7 @@ def test_async_job_completes(tmp_path: Path):
                 break
             time.sleep(0.02)
         assert status["status"] == "complete"
+        assert app_module.memory.get_job(job_id).status == "complete"
 
 
 @pytest.mark.asyncio
@@ -101,3 +105,33 @@ async def test_model_provider_falls_back():
 def test_product_links_require_https():
     with pytest.raises(ValueError):
         Product(id="bad", name="Bad", description="Unsafe link", category="test", interests=[], price=1, shipping={"US": 0}, url="javascript:alert(1)", image="https://example.com/image.jpg", merchant="Test", rating=1)
+
+
+def test_interrupted_jobs_are_recovered_as_failed(tmp_path: Path):
+    path = str(tmp_path / "restart.db")
+    store = MemoryStore(path)
+    store.save_job(JobStatus(id="job", thread_id="thread", status="running"))
+    recovered = MemoryStore(path).get_job("job")
+    assert recovered.status == "failed"
+    assert "restarted" in recovered.error
+
+
+def test_compact_context_keeps_latest_checkpoint(tmp_path: Path):
+    store = MemoryStore(str(tmp_path / "context.db"))
+    store.begin_thread("thread")
+    store.checkpoint("thread", "intent", {"budget": 40})
+    store.checkpoint("thread", "ranked", {"product_ids": ["coffee-kit"]})
+    context = store.compact_context("thread")
+    assert context["checkpoint"]["phase"] == "ranked"
+
+
+def test_production_middleware_auth_and_rate_limit():
+    secured = FastAPI()
+    secured.add_middleware(ProductionMiddleware, api_key="secret", rate_limit_per_minute=1)
+    @secured.get("/api/value")
+    def value(): return {"ok": True}
+    client = TestClient(secured)
+    assert client.get("/api/value").status_code == 401
+    first = client.get("/api/value", headers={"x-api-key": "secret"})
+    assert first.status_code == 200 and first.headers["x-request-id"]
+    assert client.get("/api/value", headers={"x-api-key": "secret"}).status_code == 429

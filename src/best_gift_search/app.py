@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import os
 from collections import defaultdict
 
 from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
@@ -12,10 +11,14 @@ from .guardrails import UnsafeInput
 from .jobs import JobManager
 from .memory import MemoryStore
 from .models import AgentEvent, FeedbackRequest, JobStatus, SearchRequest, SearchResponse
+from .middleware import ProductionMiddleware
 from .runtime import build_agent_loop, runtime_info
+from .settings import Settings
 
 app = FastAPI(title="Best Gift Search API", version="0.1.0", description="Explainable multi-agent gift discovery")
-app.add_middleware(CORSMiddleware, allow_origins=[os.getenv("BEST_GIFT_CORS", "http://localhost:5173")], allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
+settings = Settings.from_env()
+app.add_middleware(CORSMiddleware, allow_origins=list(settings.cors_origins), allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
+app.add_middleware(ProductionMiddleware, api_key=settings.api_key, rate_limit_per_minute=settings.rate_limit_per_minute)
 memory = MemoryStore()
 metrics = MetricsHook()
 loop = build_agent_loop(memory, hooks=[metrics])
@@ -87,6 +90,11 @@ def thread(thread_id: str):
 @app.get("/api/threads/{thread_id}/events")
 def thread_events(thread_id: str):
     return {"events": memory.events(thread_id)}
+
+
+@app.get("/api/threads/{thread_id}/context")
+def thread_context(thread_id: str):
+    return memory.compact_context(thread_id)
 
 
 @app.post("/api/threads/{thread_id}/feedback")

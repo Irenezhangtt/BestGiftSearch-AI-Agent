@@ -92,6 +92,7 @@ class FeedbackRequest(BaseModel):
 
 class JobStatus(BaseModel):
     id: str
+    thread_id: str | None = None
     status: Literal["queued", "running", "complete", "cancelled", "failed"]
     result: SearchResponse | None = None
     error: str | None = None

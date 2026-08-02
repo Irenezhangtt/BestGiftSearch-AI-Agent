@@ -18,26 +18,31 @@ class JobManager:
         job_id = uuid4().hex
         thread_id = request.thread_id or uuid4().hex
         request = request.model_copy(update={"thread_id": thread_id})
-        self.jobs[job_id] = JobStatus(id=job_id, status="queued")
+        self.jobs[job_id] = JobStatus(id=job_id, thread_id=thread_id, status="queued")
+        self.loop.memory.save_job(self.jobs[job_id])
         self.tasks[job_id] = asyncio.create_task(self._run(job_id, request))
         return self.jobs[job_id]
 
     async def _run(self, job_id: str, request: SearchRequest):
-        self.jobs[job_id] = JobStatus(id=job_id, status="running")
+        thread_id = request.thread_id
+        self.jobs[job_id] = JobStatus(id=job_id, thread_id=thread_id, status="running")
+        self.loop.memory.save_job(self.jobs[job_id])
         try:
             result = await self.loop.run(request, self.sink)
-            self.jobs[job_id] = JobStatus(id=job_id, status="complete", result=result)
+            self.jobs[job_id] = JobStatus(id=job_id, thread_id=thread_id, status="complete", result=result)
         except (SearchCancelled, asyncio.CancelledError):
-            self.jobs[job_id] = JobStatus(id=job_id, status="cancelled")
+            self.jobs[job_id] = JobStatus(id=job_id, thread_id=thread_id, status="cancelled")
         except Exception as error:
-            self.jobs[job_id] = JobStatus(id=job_id, status="failed", error=str(error))
+            self.jobs[job_id] = JobStatus(id=job_id, thread_id=thread_id, status="failed", error=str(error))
+        self.loop.memory.save_job(self.jobs[job_id])
 
     def get(self, job_id: str) -> JobStatus | None:
-        return self.jobs.get(job_id)
+        return self.jobs.get(job_id) or self.loop.memory.get_job(job_id)
 
     def cancel(self, job_id: str) -> bool:
         task = self.tasks.get(job_id)
         if not task or task.done(): return False
         task.cancel()
-        self.jobs[job_id] = JobStatus(id=job_id, status="cancelled")
+        self.jobs[job_id] = JobStatus(id=job_id, thread_id=self.jobs[job_id].thread_id, status="cancelled")
+        self.loop.memory.save_job(self.jobs[job_id])
         return True
