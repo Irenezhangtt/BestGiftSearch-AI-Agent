@@ -42,7 +42,9 @@ class AgentLoop:
 
         await emit("think", "planner", "Understanding the recipient, occasion, constraints, and desired feeling.")
         safe_request = request.model_copy(update={"message": sanitize_message(request.message)})
-        intent = parse_intent(safe_request)
+        analyzer = getattr(self.model, "analyze", None)
+        analyzed = await analyzer(safe_request) if analyzer else None
+        intent = analyzed or parse_intent(safe_request)
         self.memory.checkpoint(thread_id, "intent", intent.model_dump())
         await emit("act", "planner", "Forking recipient, catalog, and value specialists in parallel.")
 

@@ -20,6 +20,7 @@ class SearchIntent(BaseModel):
     occasion: str = "gift"
     interests: list[str] = []
     exclusions: list[str] = []
+    search_queries: list[str] = []
     budget: float = 100
     country: str = "US"
     currency: str = "USD"
