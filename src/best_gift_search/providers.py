@@ -211,12 +211,18 @@ class FallbackModelProvider:
         self.fallback_count = 0
         self.last_error: str | None = None
 
+    @staticmethod
+    def _safe_error(error: Exception) -> str:
+        response = getattr(error, "response", None)
+        status = getattr(response, "status_code", None)
+        return f"{type(error).__name__}:{status}" if status else type(error).__name__
+
     async def summarize(self, intent: SearchIntent, count: int) -> str:
         try:
             return await asyncio.wait_for(self.primary.summarize(intent, count), timeout=8)
         except Exception as error:
             self.fallback_count += 1
-            self.last_error = f"{type(error).__name__}: {error}"[:300]
+            self.last_error = self._safe_error(error)
             return await self.fallback.summarize(intent, count)
 
     async def analyze(self, request: SearchRequest) -> SearchIntent | None:
@@ -226,7 +232,7 @@ class FallbackModelProvider:
             return await asyncio.wait_for(analyzer(request), timeout=18)
         except Exception as error:
             self.fallback_count += 1
-            self.last_error = f"{type(error).__name__}: {error}"[:300]
+            self.last_error = self._safe_error(error)
             return None
 
 
