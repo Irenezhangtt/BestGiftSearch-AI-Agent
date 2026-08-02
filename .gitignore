@@ -7,4 +7,5 @@ __pycache__/
 *.db
 web/node_modules/
 web/dist/
+web/*.tsbuildinfo
 .DS_Store
