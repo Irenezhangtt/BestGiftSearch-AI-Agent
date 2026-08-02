@@ -25,7 +25,7 @@ Best Gift Search is a runnable multi-agent gift discovery MVP inspired by the su
 | Run the complete product | Docker Compose | React UI + FastAPI + WebSocket + SQLite |
 | Develop either layer | Native Python/Node setup | Hot reload and direct access to both services |
 
-The `site/` directory is a self-contained public showcase with clearly labelled example results. The `web/` directory is the real application UI and talks to the FastAPI service in `src/best_gift_search/`.
+Open the hosted **[Best Gift Search visual showcase](https://best-gift-search-ai.tina219127.chatgpt.site)**. The `site/` directory is its self-contained source with clearly labelled example results. The `web/` directory is the real application UI and talks to the FastAPI service in `src/best_gift_search/`.
 
 ## Quick start with Docker (recommended)
 
