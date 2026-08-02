@@ -27,7 +27,7 @@ Best Gift Search is a runnable multi-agent gift discovery MVP inspired by the su
 | Run the complete product | Docker Compose | React UI + FastAPI + WebSocket + SQLite |
 | Develop either layer | Native Python/Node setup | Hot reload and direct access to both services |
 
-Open the public **[GitHub Pages interactive demo](https://irenezhangtt.github.io/BestGiftSearch-AI-Agent/)**. Its browser-side deterministic recommender extracts supported interests and budget terms from English or Chinese prompts, then reranks eight representative products. A second [Sites showcase](https://best-gift-search-ai.tina219127.chatgpt.site) is also available. Local/Docker builds of the same UI talk to the real FastAPI service in `src/best_gift_search/`.
+Open the public **[GitHub Pages interactive demo](https://irenezhangtt.github.io/BestGiftSearch-AI-Agent/)**. Its browser-side deterministic recommender semantically combines recipient type, age, occasion, interests, exclusions, and English or Chinese budget terms. Budget is treated as a hard constraint whenever an eligible item exists, and the shortlist is diversified across product categories. Sixteen representative products span multiple price tiers so changing the prompt materially changes the recommendations. A second [Sites showcase](https://best-gift-search-ai.tina219127.chatgpt.site) is also available. Local/Docker builds of the same UI talk to the real FastAPI service in `src/best_gift_search/`.
 
 ## Quick start with Docker (recommended)
 
@@ -84,6 +84,15 @@ Example prompt:
 
 ```text
 A thoughtful birthday gift for my sister who loves coffee and travel, under $80
+```
+
+Additional semantic examples:
+
+```text
+A science gift for my 10-year-old son, under $35
+An anniversary gift for my wife who loves astronomy, under $60
+A thank-you gift for my coworker, no coffee, under $40
+给喜欢园艺和做饭的妈妈选生日礼物，预算30美元以内
 ```
 
 ### Optional live providers
