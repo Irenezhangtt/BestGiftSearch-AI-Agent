@@ -6,11 +6,11 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from best_gift_search import app as app_module
-from best_gift_search.agents import AgentLoop
+from best_gift_search.agents import AgentLoop, parse_intent
 from best_gift_search.catalog import PRODUCTS
 from best_gift_search.memory import MemoryStore
 from best_gift_search.guardrails import UnsafeInput, sanitize_message
-from best_gift_search.models import Product, SearchIntent
+from best_gift_search.models import Product, SearchIntent, SearchRequest
 from best_gift_search.models import JobStatus
 from best_gift_search.middleware import ProductionMiddleware
 from best_gift_search.providers import FallbackCatalogProvider, FallbackModelProvider, OpenAIResponsesModelProvider, SerpApiCatalogProvider, build_product_query
@@ -52,6 +52,22 @@ def test_search_returns_ranked_affordable_gifts(tmp_path: Path):
     assert body["events"][-1]["phase"] == "complete"
     assert body["evaluation"]["overall"] > 0
     assert app_module.memory.events(body["thread_id"])
+
+
+def test_intent_excludes_negative_terms_and_understands_age_modified_recipient():
+    intent = parse_intent(SearchRequest(message="A science birthday gift for my 10-year-old son under $60, no coffee"))
+    assert intent.recipient == "son"
+    assert intent.occasion == "birthday"
+    assert intent.budget == 60
+    assert intent.interests == ["science"]
+    assert intent.exclusions == ["coffee"]
+
+
+def test_intent_extracts_open_ended_interests():
+    intent = parse_intent(SearchRequest(message="A gift for my friend who loves dinosaurs and watercolor under $45"))
+    assert intent.recipient == "friend"
+    assert "dinosaurs" in intent.interests
+    assert "watercolor" in intent.interests
 
 
 def test_feedback_is_persisted(tmp_path: Path):

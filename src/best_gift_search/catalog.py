@@ -44,13 +44,13 @@ def rank(products: list[Product], intent: SearchIntent, preferences: list[str]) 
         product_words = tokenize(" ".join([product.name, product.description, *product.interests]))
         matches = sorted(wanted & product_words)
         conflict = sorted(excluded & product_words)
+        if conflict:
+            continue
         budget_score = max(0, 1 - total / max(intent.budget, 1))
         interest_score = min(1, len(matches) / max(1, len(wanted)))
         score = round(100 * (0.5 * interest_score + 0.3 * budget_score + 0.2 * product.rating / 5), 1)
         if total > intent.budget:
             score -= 20
-        if conflict:
-            score -= 35
         reasons = ([f"Matches {', '.join(matches)}"] if matches else ["A versatile, well-reviewed gift"]) + [f"{intent.currency} {total:.0f} delivered", f"Rated {product.rating}/5"]
         caveat = None if total <= intent.budget else f"Exceeds the {intent.currency} {intent.budget:.0f} budget by {intent.currency} {total-intent.budget:.0f}"
         results.append(Recommendation(product=product, shipping_cost=shipping, total_cost=total, score=max(0, score), reasons=reasons, caveat=caveat))
