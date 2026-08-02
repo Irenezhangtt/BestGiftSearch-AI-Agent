@@ -7,6 +7,7 @@ from fastapi.testclient import TestClient
 
 from best_gift_search import app as app_module
 from best_gift_search.agents import AgentLoop
+from best_gift_search.catalog import PRODUCTS
 from best_gift_search.memory import MemoryStore
 from best_gift_search.guardrails import UnsafeInput, sanitize_message
 from best_gift_search.models import Product, SearchIntent
@@ -126,6 +127,12 @@ async def test_model_provider_falls_back():
 def test_product_links_require_https():
     with pytest.raises(ValueError):
         Product(id="bad", name="Bad", description="Unsafe link", category="test", interests=[], price=1, shipping={"US": 0}, url="javascript:alert(1)", image="https://example.com/image.jpg", merchant="Test", rating=1)
+
+
+def test_demo_catalog_has_shoppable_non_placeholder_links():
+    assert all(str(product.url).startswith("https://") for product in PRODUCTS)
+    assert all("example.com" not in str(product.url) for product in PRODUCTS)
+    assert all("/search?" in str(product.url) for product in PRODUCTS)
 
 
 def test_interrupted_jobs_are_recovered_as_failed(tmp_path: Path):
