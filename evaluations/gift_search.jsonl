@@ -1,0 +1,4 @@
+{"request":{"message":"Birthday gift for my sister who loves coffee and travel under $80","country":"US","user_id":"eval-coffee"},"expected_product_ids":["coffee-kit"]}
+{"request":{"message":"A mindful tea gift under $90","country":"US","user_id":"eval-tea"},"expected_product_ids":["tea-ceremony"]}
+{"request":{"message":"Science and technology gift for a family under $100","country":"CA","user_id":"eval-tech"},"expected_product_ids":["lego-bot"]}
+{"request":{"message":"Romantic astronomy anniversary gift under $60","country":"GB","user_id":"eval-stars"},"expected_product_ids":["night-sky"]}
