@@ -6,14 +6,16 @@ from collections import defaultdict
 from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 
-from .agents import AgentLoop
+from .agents import AgentLoop, SearchCancelled
+from .hooks import MetricsHook
 from .memory import MemoryStore
 from .models import AgentEvent, FeedbackRequest, SearchRequest, SearchResponse
 
 app = FastAPI(title="Best Gift Search API", version="0.1.0", description="Explainable multi-agent gift discovery")
 app.add_middleware(CORSMiddleware, allow_origins=[os.getenv("BEST_GIFT_CORS", "http://localhost:5173")], allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
 memory = MemoryStore()
-loop = AgentLoop(memory)
+metrics = MetricsHook()
+loop = AgentLoop(memory, hooks=[metrics])
 connections: dict[str, set[WebSocket]] = defaultdict(set)
 
 
@@ -33,9 +35,17 @@ def health():
     return {"status": "ok", "service": "best-gift-search"}
 
 
+@app.get("/api/metrics")
+def get_metrics():
+    return metrics.snapshot()
+
+
 @app.post("/api/search", response_model=SearchResponse)
 async def search(request: SearchRequest):
-    return await loop.run(request, broadcast)
+    try:
+        return await loop.run(request, broadcast)
+    except SearchCancelled:
+        raise HTTPException(409, "Search cancelled")
 
 
 @app.get("/api/threads/{thread_id}")
@@ -44,6 +54,11 @@ def thread(thread_id: str):
     if not result:
         raise HTTPException(404, "Thread not found")
     return result
+
+
+@app.get("/api/threads/{thread_id}/events")
+def thread_events(thread_id: str):
+    return {"events": memory.events(thread_id)}
 
 
 @app.post("/api/threads/{thread_id}/feedback")

@@ -22,14 +22,16 @@ def tokenize(text: str) -> set[str]:
     return set(re.findall(r"[a-z0-9]+", text.lower()))
 
 
-def retrieve(intent: SearchIntent, limit: int = 8) -> list[Product]:
+def retrieve(intent: SearchIntent, products: list[Product] | None = None, limit: int = 8) -> list[Product]:
     query = tokenize(" ".join([intent.recipient, intent.occasion, *intent.interests]))
+    corpus = products or PRODUCTS
     def relevance(product: Product) -> float:
         words = tokenize(" ".join([product.name, product.description, product.category, *product.interests]))
         overlap = len(query & words) / math.sqrt(max(1, len(query) * len(words)))
+        phrase = sum(0.08 for interest in intent.interests if interest in product.interests)
         afford = 0.25 if product.price <= intent.budget else -0.3
-        return overlap + afford + product.rating / 100
-    return sorted(PRODUCTS, key=relevance, reverse=True)[:limit]
+        return overlap + phrase + afford + product.rating / 100
+    return sorted(corpus, key=relevance, reverse=True)[:limit]
 
 
 def rank(products: list[Product], intent: SearchIntent, preferences: list[str]) -> list[Recommendation]:

@@ -20,9 +20,20 @@ def test_search_returns_ranked_affordable_gifts(tmp_path: Path):
     assert body["intent"]["budget"] == 80
     assert body["recommendations"][0]["product"]["id"] == "coffee-kit"
     assert body["events"][-1]["phase"] == "complete"
+    assert body["evaluation"]["overall"] > 0
+    assert app_module.memory.events(body["thread_id"])
 
 
 def test_feedback_is_persisted(tmp_path: Path):
     store = MemoryStore(str(tmp_path / "feedback.db"))
     store.feedback("thread", "coffee-kit", 1, "Great")
     assert store.preferences("thread") == ["coffee kit"]
+
+
+def test_cancel_state_and_checkpoint(tmp_path: Path):
+    store = MemoryStore(str(tmp_path / "state.db"))
+    store.begin_thread("thread")
+    store.checkpoint("thread", "intent", {"budget": 50})
+    assert not store.is_cancelled("thread")
+    store.cancel("thread")
+    assert store.is_cancelled("thread")

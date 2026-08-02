@@ -5,7 +5,7 @@ import os
 import sqlite3
 from contextlib import contextmanager
 
-from .models import AgentEvent, SearchIntent, SearchResponse
+from .models import AgentEvent, SearchResponse
 
 
 class MemoryStore:
@@ -29,6 +29,7 @@ class MemoryStore:
                 CREATE TABLE IF NOT EXISTS threads (id TEXT PRIMARY KEY, intent TEXT, response TEXT, cancelled INTEGER DEFAULT 0, updated_at TEXT DEFAULT CURRENT_TIMESTAMP);
                 CREATE TABLE IF NOT EXISTS events (id TEXT PRIMARY KEY, thread_id TEXT, payload TEXT, created_at TEXT DEFAULT CURRENT_TIMESTAMP);
                 CREATE TABLE IF NOT EXISTS feedback (id INTEGER PRIMARY KEY, thread_id TEXT, product_id TEXT, value INTEGER, note TEXT, created_at TEXT DEFAULT CURRENT_TIMESTAMP);
+                CREATE TABLE IF NOT EXISTS checkpoints (id INTEGER PRIMARY KEY, thread_id TEXT, phase TEXT, state TEXT, created_at TEXT DEFAULT CURRENT_TIMESTAMP);
             """)
 
     def save_event(self, event: AgentEvent):
@@ -38,6 +39,25 @@ class MemoryStore:
     def save_response(self, response: SearchResponse):
         with self.connect() as db:
             db.execute("INSERT INTO threads(id,intent,response,cancelled) VALUES(?,?,?,0) ON CONFLICT(id) DO UPDATE SET intent=excluded.intent,response=excluded.response,cancelled=0,updated_at=CURRENT_TIMESTAMP", (response.thread_id, response.intent.model_dump_json(), response.model_dump_json()))
+
+    def begin_thread(self, thread_id: str):
+        with self.connect() as db:
+            db.execute("INSERT INTO threads(id,cancelled) VALUES(?,0) ON CONFLICT(id) DO UPDATE SET cancelled=0,updated_at=CURRENT_TIMESTAMP", (thread_id,))
+
+    def checkpoint(self, thread_id: str, phase: str, state: dict):
+        compact = json.dumps(state, ensure_ascii=False, separators=(",", ":"))
+        with self.connect() as db:
+            db.execute("INSERT INTO checkpoints(thread_id,phase,state) VALUES(?,?,?)", (thread_id, phase, compact))
+
+    def is_cancelled(self, thread_id: str) -> bool:
+        with self.connect() as db:
+            row = db.execute("SELECT cancelled FROM threads WHERE id=?", (thread_id,)).fetchone()
+        return bool(row and row["cancelled"])
+
+    def events(self, thread_id: str) -> list[dict]:
+        with self.connect() as db:
+            rows = db.execute("SELECT payload FROM events WHERE thread_id=? ORDER BY created_at,id", (thread_id,)).fetchall()
+        return [json.loads(row["payload"]) for row in rows]
 
     def get_thread(self, thread_id: str) -> dict | None:
         with self.connect() as db:

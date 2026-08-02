@@ -62,6 +62,17 @@ class SearchResponse(BaseModel):
     intent: SearchIntent
     recommendations: list[Recommendation]
     events: list[AgentEvent]
+    evaluation: "Evaluation | None" = None
+
+
+class Evaluation(BaseModel):
+    relevance: float
+    budget_fit: float
+    diversity: float
+    explainability: float
+    overall: float
+    passed: bool
+    notes: list[str]
 
 
 class FeedbackRequest(BaseModel):
