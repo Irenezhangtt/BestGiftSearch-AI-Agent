@@ -38,20 +38,35 @@ def rank(products: list[Product], intent: SearchIntent, preferences: list[str]) 
     wanted = tokenize(" ".join([*intent.interests, *preferences]))
     excluded = tokenize(" ".join(intent.exclusions))
     results = []
+    price_floor = intent.budget * 0.5
     for product in products:
         shipping = product.shipping.get(intent.country, 22)
         total = product.price + shipping
+        if total > intent.budget:
+            continue
         product_words = tokenize(" ".join([product.name, product.description, *product.interests]))
         matches = sorted(wanted & product_words)
         conflict = sorted(excluded & product_words)
         if conflict:
             continue
-        budget_score = max(0, 1 - total / max(intent.budget, 1))
+        budget_score = min(1, total / max(intent.budget, 1))
         interest_score = min(1, len(matches) / max(1, len(wanted)))
-        score = round(100 * (0.5 * interest_score + 0.3 * budget_score + 0.2 * product.rating / 5), 1)
-        if total > intent.budget:
-            score -= 20
+        score = round(100 * (0.45 * interest_score + 0.35 * budget_score + 0.2 * product.rating / 5), 1)
         reasons = ([f"Matches {', '.join(matches)}"] if matches else ["A versatile, well-reviewed gift"]) + [f"{intent.currency} {total:.0f} delivered", f"Rated {product.rating}/5"]
-        caveat = None if total <= intent.budget else f"Exceeds the {intent.currency} {intent.budget:.0f} budget by {intent.currency} {total-intent.budget:.0f}"
-        results.append(Recommendation(product=product, shipping_cost=shipping, total_cost=total, score=max(0, score), reasons=reasons, caveat=caveat))
-    return sorted(results, key=lambda item: item.score, reverse=True)[:4]
+        results.append(Recommendation(product=product, shipping_cost=shipping, total_cost=total, score=max(0, score), reasons=reasons, caveat=None))
+    ordered = sorted(results, key=lambda item: (item.total_cost >= price_floor, item.score, item.total_cost), reverse=True)
+    selected: list[Recommendation] = []
+    categories: set[str] = set()
+    for item in ordered:
+        if item.product.category in categories:
+            continue
+        selected.append(item); categories.add(item.product.category)
+        if len(selected) == 4:
+            return selected
+    for item in ordered:
+        if item in selected:
+            continue
+        selected.append(item)
+        if len(selected) == 4:
+            break
+    return selected

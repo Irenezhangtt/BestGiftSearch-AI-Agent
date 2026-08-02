@@ -54,6 +54,8 @@ class SerpApiCatalogProvider:
                 "q": build_product_query(intent),
                 "gl": intent.country.lower(),
                 "hl": "en",
+                "min_price": round(intent.budget * 0.5, 2),
+                "max_price": round(intent.budget, 2),
                 "api_key": self.api_key,
             })
             response.raise_for_status()
@@ -90,9 +92,23 @@ class SerpApiCatalogProvider:
         product_id = str(item.get("product_id") or hashlib.sha256(f"{title}|{url}".encode()).hexdigest()[:20])
         title_terms = title.lower()
         matched_interests = [interest for interest in intent.interests if interest.lower() in title_terms]
+        category_rules = [
+            ("educational kits", ["kit", "experiment", "stem", "robot", "telescope", "microscope", "puzzle", "game"]),
+            ("books", ["book", "journal", "guide", "encyclopedia"]),
+            ("art and decor", ["print", "poster", "art", "painting", "frame", "map"]),
+            ("electronics", ["electronic", "speaker", "headphone", "camera", "digital", "smart"]),
+            ("toys", ["toy", "lego", "plush", "figure", "model"]),
+            ("apparel", ["shirt", "hoodie", "sweater", "sock", "hat", "jacket"]),
+            ("jewelry", ["necklace", "bracelet", "ring", "earring", "jewelry"]),
+            ("food and drink", ["coffee", "tea", "chocolate", "snack", "food", "candy"]),
+            ("homeware", ["mug", "cup", "blanket", "lamp", "pillow", "bottle"]),
+            ("outdoors", ["camp", "hiking", "outdoor", "picnic", "garden"]),
+            ("stationery", ["pen", "notebook", "stationery", "card"]),
+        ]
+        category = next((label for label, terms in category_rules if any(term in title_terms for term in terms)), "other gifts")
         return Product(
             id=f"live-{product_id}", name=title[:180], description=description[:500],
-            category="live-shopping", interests=matched_interests, price=price,
+            category=category, interests=matched_interests, price=price,
             shipping={intent.country: 0}, url=url, image=image, merchant=merchant,
             rating=max(0, min(5, float(item.get("rating") or 4.0))),
         )

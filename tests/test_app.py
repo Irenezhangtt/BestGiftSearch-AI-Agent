@@ -156,6 +156,8 @@ async def test_live_shopping_provider_builds_semantic_query_and_maps_products():
             assert "birthday gift for son science" in params["q"]
             assert "-coffee" in params["q"]
             assert params["gl"] == "us"
+            assert params["min_price"] == 30
+            assert params["max_price"] == 60
             return Response()
     intent = SearchIntent(recipient="son", occasion="birthday", interests=["science"], exclusions=["coffee"], budget=60)
     products = await SerpApiCatalogProvider("secret", client=Client()).search(intent)
@@ -175,6 +177,22 @@ async def test_live_catalog_uses_offline_products_only_on_failure():
     products = await provider.search(SearchIntent(interests=["coffee"]))
     assert products == PRODUCTS
     assert provider.fallback_count == 1
+
+
+def test_ranking_never_exceeds_budget_prefers_upper_half_and_diversifies():
+    from best_gift_search.catalog import rank
+    def product(identifier, price, category, name):
+        return Product(id=identifier, name=name, description=name, category=category, interests=["science"], price=price, shipping={"US": 0}, url=f"https://shop.example/{identifier}", image=f"https://images.example/{identifier}.jpg", merchant="Shop", rating=4.5)
+    products = [
+        product("cheap", 12, "books", "Science Book"), product("book", 65, "books", "Science Encyclopedia"),
+        product("kit", 72, "educational kits", "Science Kit"), product("art", 58, "art and decor", "Science Print"),
+        product("toy", 79, "toys", "Science Toy"), product("over", 81, "electronics", "Science Camera"),
+    ]
+    results = rank(products, SearchIntent(interests=["science"], budget=80), [])
+    assert len(results) == 4
+    assert all(40 <= item.total_cost <= 80 for item in results)
+    assert len({item.product.category for item in results}) == 4
+    assert "over" not in {item.product.id for item in results}
 
 
 def test_product_links_require_https():
