@@ -196,4 +196,4 @@ docs/OPERATIONS.md      Failure modes, observability, security, deployment check
 
 ## Responsible recommendations
 
-Every result includes its scoring reasons and total landed cost. Affiliate links are not generated, sponsored placement is not supported, and feedback is stored as an explicit user signal. Live marketplace integrations should add price freshness timestamps, merchant reliability checks, and regional privacy/consent controls.
+Every result includes its scoring reasons and total landed cost. Affiliate links are not generated, sponsored placement is not supported, and feedback is stored as an explicit user signal. The static public demo uses unaffiliated Etsy search links because search result pages are less brittle than individual inventory listings; Etsy is not the intended exclusive production provider. Live marketplace integrations should aggregate multiple approved retailers and add price freshness timestamps, merchant reliability checks, and regional privacy/consent controls.
