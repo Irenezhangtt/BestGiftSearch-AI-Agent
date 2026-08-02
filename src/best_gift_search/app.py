@@ -39,6 +39,17 @@ async def broadcast(event: AgentEvent):
 jobs = JobManager(loop, broadcast)
 
 
+@app.get("/", include_in_schema=False)
+def index():
+    return {
+        "name": "Best Gift Search API",
+        "status": "ready",
+        "docs": "/docs",
+        "health": "/health",
+        "demo": "https://irenezhangtt.github.io/BestGiftSearch-AI-Agent/",
+    }
+
+
 @app.get("/health")
 def health():
     return {"status": "ok", "service": "best-gift-search", **runtime_info(loop)}
@@ -112,6 +123,10 @@ def cancel(thread_id: str):
 
 @app.websocket("/ws/{thread_id}")
 async def events(websocket: WebSocket, thread_id: str):
+    origin = websocket.headers.get("origin")
+    if origin and origin not in settings.cors_origins:
+        await websocket.close(code=1008, reason="Origin not allowed")
+        return
     await websocket.accept(); connections[thread_id].add(websocket)
     try:
         while True:

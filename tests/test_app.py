@@ -13,10 +13,31 @@ from best_gift_search.models import Product, SearchIntent
 from best_gift_search.models import JobStatus
 from best_gift_search.middleware import ProductionMiddleware
 from best_gift_search.providers import FallbackModelProvider, OpenAIResponsesModelProvider
+from best_gift_search.settings import Settings
 
 
 def test_health():
     assert TestClient(app_module.app).get("/health").json()["status"] == "ok"
+
+
+def test_root_discovers_docs_and_public_demo():
+    body = TestClient(app_module.app).get("/").json()
+    assert body["status"] == "ready"
+    assert body["docs"] == "/docs"
+    assert body["demo"].startswith("https://irenezhangtt.github.io/")
+
+
+def test_invalid_rate_limit_falls_back(monkeypatch):
+    monkeypatch.setenv("BEST_GIFT_RATE_LIMIT", "not-a-number")
+    assert Settings.from_env().rate_limit_per_minute == 120
+
+
+def test_websocket_rejects_unknown_origin():
+    with pytest.raises(Exception):
+        with TestClient(app_module.app).websocket_connect(
+            "/ws/thread", headers={"origin": "https://malicious.example"}
+        ):
+            pass
 
 
 def test_search_returns_ranked_affordable_gifts(tmp_path: Path):

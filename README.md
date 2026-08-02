@@ -1,5 +1,7 @@
 # Best Gift Search
 
+[中文说明](README.zh-CN.md) · [Public demo](https://irenezhangtt.github.io/BestGiftSearch-AI-Agent/) · [API docs after local start](http://localhost:8000/docs)
+
 Best Gift Search is a runnable multi-agent gift discovery MVP inspired by the supplied ecommerce-agent architecture brief. A planning agent fans out to recipient, catalog, and value specialists; results are compared with transparent price/shipping totals, streamed to the browser, and persisted as preference memory.
 
 ## What works
@@ -110,7 +112,7 @@ Copy `.env.example` to `.env`; these are the main operational settings:
 | `BEST_GIFT_CATALOG_TOKEN` | Optional server-side bearer token for that endpoint |
 | `BEST_GIFT_API_KEY` | Optional shared API key; clients then send `X-API-Key` |
 | `BEST_GIFT_RATE_LIMIT` | Per-client HTTP request limit for a one-minute window |
-| `BEST_GIFT_DATABASE_PATH` | SQLite file location |
+| `BEST_GIFT_DB` | SQLite file location |
 
 Do not expose provider tokens through Vite variables or commit them to Git. Production identity should be enforced at an OIDC-aware gateway; the shared API key is intended as a lightweight deployment control.
 
