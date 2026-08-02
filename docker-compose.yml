@@ -1,0 +1,24 @@
+services:
+  api:
+    build: .
+    environment:
+      BEST_GIFT_DB: /data/best_gift_search.db
+      BEST_GIFT_CORS: http://localhost:5173
+    volumes:
+      - gift-data:/data
+    ports:
+      - "8000:8000"
+  web:
+    image: node:22-alpine
+    working_dir: /app
+    volumes:
+      - ./web:/app
+    command: sh -c "npm install && npm run dev -- --host 0.0.0.0"
+    environment:
+      VITE_API_URL: http://localhost:8000
+    ports:
+      - "5173:5173"
+    depends_on:
+      - api
+volumes:
+  gift-data:
