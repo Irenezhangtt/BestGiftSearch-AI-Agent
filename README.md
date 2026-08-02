@@ -1,6 +1,6 @@
 # Best Gift Search
 
-[中文说明](README.zh-CN.md) · [Public demo](https://irenezhangtt.github.io/BestGiftSearch-AI-Agent/) · [API docs after local start](http://localhost:8000/docs)
+[Public demo](https://irenezhangtt.github.io/BestGiftSearch-AI-Agent/) · [API docs after local start](http://localhost:8000/docs) · [Architecture](docs/ARCHITECTURE.md) · [Operations](docs/OPERATIONS.md)
 
 Best Gift Search is a runnable multi-agent gift discovery MVP inspired by the supplied ecommerce-agent architecture brief. A planning agent fans out to recipient, catalog, and value specialists; results are compared with transparent price/shipping totals, streamed to the browser, and persisted as preference memory.
 
