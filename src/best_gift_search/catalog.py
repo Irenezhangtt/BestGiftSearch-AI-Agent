@@ -47,6 +47,8 @@ def rank(products: list[Product], intent: SearchIntent, preferences: list[str]) 
         budget_score = max(0, 1 - total / max(intent.budget, 1))
         interest_score = min(1, len(matches) / max(1, len(wanted)))
         score = round(100 * (0.5 * interest_score + 0.3 * budget_score + 0.2 * product.rating / 5), 1)
+        if total > intent.budget:
+            score -= 20
         if conflict:
             score -= 35
         reasons = ([f"Matches {', '.join(matches)}"] if matches else ["A versatile, well-reviewed gift"]) + [f"{intent.currency} {total:.0f} delivered", f"Rated {product.rating}/5"]

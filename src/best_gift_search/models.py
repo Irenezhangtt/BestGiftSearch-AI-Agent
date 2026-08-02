@@ -12,6 +12,7 @@ class SearchRequest(BaseModel):
     thread_id: str | None = None
     country: str = Field(default="US", min_length=2, max_length=2)
     currency: str = Field(default="USD", min_length=3, max_length=3)
+    user_id: str = Field(default="anonymous", min_length=1, max_length=80, pattern=r"^[A-Za-z0-9_.-]+$")
 
 
 class SearchIntent(BaseModel):
@@ -79,3 +80,11 @@ class FeedbackRequest(BaseModel):
     product_id: str
     value: Literal[-1, 1]
     note: str | None = Field(default=None, max_length=500)
+    user_id: str = Field(default="anonymous", min_length=1, max_length=80, pattern=r"^[A-Za-z0-9_.-]+$")
+
+
+class JobStatus(BaseModel):
+    id: str
+    status: Literal["queued", "running", "complete", "cancelled", "failed"]
+    result: SearchResponse | None = None
+    error: str | None = None

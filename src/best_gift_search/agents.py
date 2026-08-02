@@ -8,6 +8,7 @@ from uuid import uuid4
 from .catalog import rank, retrieve
 from .evaluation import evaluate
 from .hooks import AgentHook
+from .guardrails import sanitize_message
 from .memory import MemoryStore
 from .models import AgentEvent, SearchIntent, SearchRequest, SearchResponse
 from .providers import CatalogProvider, DemoCatalogProvider, DeterministicModelProvider, ModelProvider
@@ -29,7 +30,7 @@ class AgentLoop:
     async def run(self, request: SearchRequest, sink: EventSink) -> SearchResponse:
         thread_id = request.thread_id or uuid4().hex
         events: list[AgentEvent] = []
-        self.memory.begin_thread(thread_id)
+        self.memory.begin_thread(thread_id, request.user_id)
 
         async def emit(phase: str, agent: str, message: str):
             if self.memory.is_cancelled(thread_id):
@@ -40,14 +41,15 @@ class AgentLoop:
             for hook in self.hooks: await hook.after_event(event)
 
         await emit("think", "planner", "Understanding the recipient, occasion, constraints, and desired feeling.")
-        intent = parse_intent(request)
+        safe_request = request.model_copy(update={"message": sanitize_message(request.message)})
+        intent = parse_intent(safe_request)
         self.memory.checkpoint(thread_id, "intent", intent.model_dump())
         await emit("act", "planner", "Forking recipient, catalog, and value specialists in parallel.")
 
         async def recipient_agent():
             await asyncio.sleep(0.08)
             await emit("observe", "recipient", f"Gift profile: {intent.recipient}; interests: {', '.join(intent.interests) or 'open-ended'}.")
-            return self.memory.preferences(thread_id)
+            return self.memory.preferences(thread_id, request.user_id)
 
         async def catalog_agent():
             await asyncio.sleep(0.12)

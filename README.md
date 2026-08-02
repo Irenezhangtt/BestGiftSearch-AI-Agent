@@ -10,6 +10,8 @@ Best Gift Search is a runnable multi-agent gift discovery MVP inspired by the su
 - SQLite-backed threads, preference memory, feedback, cancellation, and replayable events
 - Provider-neutral model/catalog adapters, lifecycle hooks, compact checkpoints, and telemetry
 - Rubrics-as-Rewards evaluation for relevance, budget fit, diversity, and explainability
+- Prompt-injection screening, Unicode normalization, and resilient provider wrappers
+- Cross-thread user preference memory plus asynchronous job status and cancellation APIs
 - FastAPI REST/WebSocket API and React + Vite interface
 - Deterministic demo mode: no API keys or paid services required
 
@@ -40,6 +42,8 @@ curl -X POST http://localhost:8000/api/search \
 
 Connect to `ws://localhost:8000/ws/{thread_id}` before submitting a search with the same `thread_id` to watch live agent events. Use `GET /api/threads/{thread_id}`, `GET /api/threads/{thread_id}/events`, `POST /api/threads/{thread_id}/feedback`, and `POST /api/threads/{thread_id}/cancel` for state, replay, learning signals, and cancellation. `GET /api/metrics` exposes lifecycle telemetry.
 
+For durable/background-style execution, create a task with `POST /api/jobs`, poll `GET /api/jobs/{job_id}`, or cancel it with `DELETE /api/jobs/{job_id}`. The in-process job registry is suitable for a single API process; production multi-worker deployments should replace it with Redis/Celery, Dramatiq, or a managed queue.
+
 ## Architecture
 
 ```text
@@ -66,6 +70,7 @@ The default providers are deterministic so development and CI need no secrets. A
 ```bash
 uv run pytest
 cd web && npm run build
+python -m best_gift_search.eval_runner evaluations/gift_search.jsonl --minimum 55
 ```
 
 ## Responsible recommendations

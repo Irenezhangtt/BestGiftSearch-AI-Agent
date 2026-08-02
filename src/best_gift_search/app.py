@@ -8,8 +8,10 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from .agents import AgentLoop, SearchCancelled
 from .hooks import MetricsHook
+from .guardrails import UnsafeInput
+from .jobs import JobManager
 from .memory import MemoryStore
-from .models import AgentEvent, FeedbackRequest, SearchRequest, SearchResponse
+from .models import AgentEvent, FeedbackRequest, JobStatus, SearchRequest, SearchResponse
 
 app = FastAPI(title="Best Gift Search API", version="0.1.0", description="Explainable multi-agent gift discovery")
 app.add_middleware(CORSMiddleware, allow_origins=[os.getenv("BEST_GIFT_CORS", "http://localhost:5173")], allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
@@ -30,6 +32,9 @@ async def broadcast(event: AgentEvent):
         connections[event.thread_id].discard(socket)
 
 
+jobs = JobManager(loop, broadcast)
+
+
 @app.get("/health")
 def health():
     return {"status": "ok", "service": "best-gift-search"}
@@ -46,6 +51,28 @@ async def search(request: SearchRequest):
         return await loop.run(request, broadcast)
     except SearchCancelled:
         raise HTTPException(409, "Search cancelled")
+    except UnsafeInput as error:
+        raise HTTPException(422, str(error))
+
+
+@app.post("/api/jobs", response_model=JobStatus, status_code=202)
+async def create_job(request: SearchRequest):
+    return jobs.submit(request)
+
+
+@app.get("/api/jobs/{job_id}", response_model=JobStatus)
+def get_job(job_id: str):
+    job = jobs.get(job_id)
+    if not job: raise HTTPException(404, "Job not found")
+    return job
+
+
+@app.delete("/api/jobs/{job_id}", response_model=JobStatus)
+def cancel_job(job_id: str):
+    job = jobs.get(job_id)
+    if not job: raise HTTPException(404, "Job not found")
+    jobs.cancel(job_id)
+    return jobs.get(job_id) or job
 
 
 @app.get("/api/threads/{thread_id}")
@@ -63,6 +90,7 @@ def thread_events(thread_id: str):
 
 @app.post("/api/threads/{thread_id}/feedback")
 def feedback(thread_id: str, request: FeedbackRequest):
+    memory.begin_thread(thread_id, request.user_id)
     memory.feedback(thread_id, request.product_id, request.value, request.note)
     return {"accepted": True}
 
