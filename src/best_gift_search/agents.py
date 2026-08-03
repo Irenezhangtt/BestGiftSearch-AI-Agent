@@ -49,7 +49,7 @@ class AgentLoop:
         explicit_request = parsed_intent.recipient != "someone special" and parsed_intent.occasion != "gift" and bool(parsed_intent.interests)
         if explicit_request:
             query_base = f"{parsed_intent.occasion} gift for {parsed_intent.recipient}"
-            queries = [f"{query_base} {interest} under {parsed_intent.currency} {parsed_intent.budget:.0f}" for interest in parsed_intent.interests[:2]]
+            queries = [f"{query_base} premium {interest} under {parsed_intent.currency} {parsed_intent.budget:.0f}" for interest in parsed_intent.interests[:2]]
             intent = parsed_intent.model_copy(update={"search_queries": queries})
         else:
             analyzed = await analyzer(safe_request) if analyzer else None
@@ -63,7 +63,7 @@ class AgentLoop:
 
         async def catalog_agent():
             candidates = await self.catalog.search(intent)
-            products = retrieve(intent, candidates, limit=24)
+            products = retrieve(intent, candidates, limit=60)
             source = getattr(self.catalog, "source_label", "configured commerce source")
             await emit("observe", "catalog", f"Retrieved {len(products)} diverse candidates from {source}.")
             return products
