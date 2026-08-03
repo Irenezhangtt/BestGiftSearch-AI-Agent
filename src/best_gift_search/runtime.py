@@ -5,14 +5,14 @@ import os
 from .agents import AgentLoop
 from .hooks import AgentHook
 from .memory import MemoryStore
-from .providers import AnthropicModelProvider, DemoCatalogProvider, DeterministicModelProvider, FallbackCatalogProvider, FallbackModelProvider, HttpCatalogProvider, OpenAIResponsesModelProvider, ResilientCatalogProvider, SerpApiCatalogProvider
+from .providers import AnthropicModelProvider, DemoCatalogProvider, DeterministicModelProvider, FallbackCatalogProvider, FallbackModelProvider, HttpCatalogProvider, OpenAIResponsesModelProvider, ProviderPolicy, ResilientCatalogProvider, SerpApiCatalogProvider
 
 
 def build_agent_loop(memory: MemoryStore, hooks: list[AgentHook] | None = None) -> AgentLoop:
     catalog_url = os.getenv("BEST_GIFT_CATALOG_URL")
     serpapi_key = os.getenv("SERPAPI_API_KEY")
     if serpapi_key:
-        catalog = FallbackCatalogProvider(ResilientCatalogProvider(SerpApiCatalogProvider(serpapi_key)))
+        catalog = FallbackCatalogProvider(ResilientCatalogProvider(SerpApiCatalogProvider(serpapi_key), ProviderPolicy(timeout_seconds=6, retries=0)))
     elif catalog_url:
         catalog = FallbackCatalogProvider(ResilientCatalogProvider(HttpCatalogProvider(catalog_url, os.getenv("BEST_GIFT_CATALOG_TOKEN"))))
     else:

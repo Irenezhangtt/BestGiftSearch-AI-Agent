@@ -48,7 +48,7 @@ class SerpApiCatalogProvider:
     async def search(self, intent: SearchIntent) -> list[Product]:
         import httpx
         if self.client is None:
-            self.client = httpx.AsyncClient(timeout=8)
+            self.client = httpx.AsyncClient(timeout=5)
         queries = list(dict.fromkeys([*intent.search_queries[:2], build_product_query(intent)]))[:2]
         async def fetch(query: str, group: int):
             response = await self.client.get(self.endpoint, params={"engine": "google_shopping", "q": query, "gl": intent.country.lower(), "hl": "en", "api_key": self.api_key})
