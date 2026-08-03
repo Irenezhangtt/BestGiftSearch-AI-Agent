@@ -75,7 +75,7 @@ def rank(products: list[Product], intent: SearchIntent, preferences: list[str]) 
         if not group or group in groups:
             continue
         selected.append(item); groups.add(group); categories.add(item.product.category)
-        if len(selected) == 4:
+        if len(selected) == 6:
             return selected
     for item in ordered:
         if item in selected:
@@ -83,12 +83,12 @@ def rank(products: list[Product], intent: SearchIntent, preferences: list[str]) 
         if item.product.category in categories:
             continue
         selected.append(item); categories.add(item.product.category)
-        if len(selected) == 4:
+        if len(selected) == 6:
             return selected
     for item in ordered:
         if item in selected:
             continue
         selected.append(item)
-        if len(selected) == 4:
+        if len(selected) == 6:
             break
     return selected

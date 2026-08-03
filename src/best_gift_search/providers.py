@@ -49,7 +49,7 @@ class SerpApiCatalogProvider:
         import httpx
         if self.client is None:
             self.client = httpx.AsyncClient(timeout=8)
-        queries = list(dict.fromkeys([*intent.search_queries[:3], build_product_query(intent)]))[:3]
+        queries = list(dict.fromkeys([*intent.search_queries[:2], build_product_query(intent)]))[:2]
         async def fetch(query: str, group: int):
             response = await self.client.get(self.endpoint, params={"engine": "google_shopping", "q": query, "gl": intent.country.lower(), "hl": "en", "api_key": self.api_key})
             response.raise_for_status(); payload = response.json()
@@ -161,12 +161,12 @@ class AnthropicModelProvider:
         return text
 
     async def analyze(self, request: SearchRequest) -> SearchIntent:
-        system = """Analyze a gift-shopping request. Return only one JSON object with keys recipient, occasion, interests, exclusions, budget, and search_queries. Resolve vague emotional language into concrete shopping concepts. search_queries must contain 2 or 3 diverse Google Shopping queries covering different product categories, preserving recipient and occasion and excluding unwanted concepts. No prose or markdown."""
-        raw = await self._message(system, f"Request: {request.message}\nCountry: {request.country}\nCurrency: {request.currency}", 600)
+        system = """Analyze a gift-shopping request. Return only compact JSON with keys recipient, occasion, interests, exclusions, budget, and search_queries. Resolve vague emotional language into concrete products. search_queries must contain exactly 2 diverse Google Shopping queries for different product categories, preserving recipient, occasion, budget, and exclusions. No prose or markdown."""
+        raw = await self._message(system, f"Request: {request.message}\nCountry: {request.country}\nCurrency: {request.currency}", 350)
         match = re.search(r"\{.*\}", raw, re.DOTALL)
         if not match: raise RuntimeError("Anthropic intent response was not JSON")
         data = json.loads(match.group(0))
-        return SearchIntent(recipient=str(data.get("recipient") or "someone special")[:80], occasion=str(data.get("occasion") or "gift")[:80], interests=[str(x)[:80] for x in data.get("interests", [])][:12], exclusions=[str(x)[:80] for x in data.get("exclusions", [])][:12], search_queries=[str(x)[:180] for x in data.get("search_queries", [])][:3], budget=float(data.get("budget") or 100), country=request.country.upper(), currency=request.currency.upper())
+        return SearchIntent(recipient=str(data.get("recipient") or "someone special")[:80], occasion=str(data.get("occasion") or "gift")[:80], interests=[str(x)[:80] for x in data.get("interests", [])][:12], exclusions=[str(x)[:80] for x in data.get("exclusions", [])][:12], search_queries=[str(x)[:180] for x in data.get("search_queries", [])][:2], budget=float(data.get("budget") or 100), country=request.country.upper(), currency=request.currency.upper())
 
     async def summarize(self, intent: SearchIntent, count: int) -> str:
         focus = ", ".join(intent.interests[:2]) if intent.interests else "their unique style"

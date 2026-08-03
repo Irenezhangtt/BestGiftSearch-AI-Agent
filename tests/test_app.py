@@ -157,7 +157,7 @@ async def test_anthropic_provider_extracts_fuzzy_intent_and_queries():
     intent = await provider.analyze(SearchRequest(message="Something meaningful but not cheesy for my quiet boyfriend who works from home, under $100"))
     assert intent.recipient == "quiet boyfriend"
     assert intent.exclusions == ["cheesy"]
-    assert len(intent.search_queries) == 3
+    assert len(intent.search_queries) == 2
     assert "home office" in intent.interests
     assert (await provider.summarize(intent, 4)).startswith("4 best-matching birthday gifts")
 
@@ -209,11 +209,12 @@ def test_ranking_never_exceeds_budget_prefers_upper_half_and_diversifies():
         product("cheap", 12, "books", "Science Book"), product("book", 65, "books", "Science Encyclopedia"),
         product("kit", 72, "educational kits", "Science Kit"), product("art", 58, "art and decor", "Science Print"),
         product("toy", 79, "toys", "Science Toy"), product("over", 81, "electronics", "Science Camera"),
+        product("desk", 55, "office accessories", "Science Desk Set"), product("outdoor", 60, "outdoors", "Science Explorer Set"),
     ]
     results = rank(products, SearchIntent(interests=["science"], budget=80), [])
-    assert len(results) == 4
+    assert len(results) == 6
     assert all(40 <= item.total_cost <= 80 for item in results)
-    assert len({item.product.category for item in results}) == 4
+    assert len({item.product.category for item in results}) == 6
     assert "over" not in {item.product.id for item in results}
 
 

@@ -44,9 +44,16 @@ class AgentLoop:
 
         await emit("think", "planner", "Understanding the recipient, occasion, constraints, and desired feeling.")
         safe_request = request.model_copy(update={"message": sanitize_message(request.message)})
+        parsed_intent = parse_intent(safe_request)
         analyzer = getattr(self.model, "analyze", None)
-        analyzed = await analyzer(safe_request) if analyzer else None
-        intent = analyzed or parse_intent(safe_request)
+        explicit_request = parsed_intent.recipient != "someone special" and parsed_intent.occasion != "gift" and bool(parsed_intent.interests)
+        if explicit_request:
+            query_base = f"{parsed_intent.occasion} gift for {parsed_intent.recipient}"
+            queries = [f"{query_base} {interest} under {parsed_intent.currency} {parsed_intent.budget:.0f}" for interest in parsed_intent.interests[:2]]
+            intent = parsed_intent.model_copy(update={"search_queries": queries})
+        else:
+            analyzed = await analyzer(safe_request) if analyzer else None
+            intent = analyzed or parsed_intent
         self.memory.checkpoint(thread_id, "intent", intent.model_dump())
         await emit("act", "planner", "Forking recipient, catalog, and value specialists in parallel.")
 
