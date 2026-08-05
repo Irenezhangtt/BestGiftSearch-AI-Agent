@@ -7,7 +7,7 @@ Best Gift Search is a runnable multi-agent gift discovery MVP inspired by the su
 ## What works
 
 - Natural-language gift requests with budget, recipient, occasion, interests, country, and exclusions
-- Parallel specialist agents and a visible `think → act → observe → reflect` event stream
+- Parallel specialist agents with a persisted, replayable `think → act → observe → reflect` event stream
 - Semantic-style catalog retrieval, reranking, price + shipping totals, and explainable match scores
 - SQLite-backed threads, preference memory, feedback, cancellation, and replayable events
 - Provider-neutral model/catalog adapters, lifecycle hooks, compact checkpoints, and telemetry
@@ -19,6 +19,40 @@ Best Gift Search is a runnable multi-agent gift discovery MVP inspired by the su
 - FastAPI REST/WebSocket API and React + Vite interface
 - Deterministic demo mode: no API keys or paid services required
 - Optional live Google Shopping retrieval: prompt-derived queries return current products, images, prices, merchants, and outbound links
+
+## Harness engineering, not just an agent prompt
+
+Best Gift Search is implemented as a small **agent execution harness**: the model proposes shopping intent and search directions, while application-owned infrastructure controls execution, state, safety, evaluation, and recovery. “Harness” here describes the engineering pattern; this project does not depend on the Harness commercial platform.
+
+| Harness concern | Implementation in this repository |
+| --- | --- |
+| Controlled lifecycle | `AgentLoop` owns explicit think, act, observe, reflect, and complete phases instead of allowing an unbounded autonomous loop |
+| Tool boundaries | Typed `ModelProvider` and `CatalogProvider` contracts isolate Claude, Google Shopping, deterministic fallbacks, and future commerce adapters |
+| Lifecycle hooks | `before_step` and `after_event` hooks provide a middleware-style extension point for metrics, tracing, policy checks, or test instrumentation |
+| Durable execution state | SQLite persists threads, events, feedback, checkpoints, and jobs; interrupted jobs are recovered as failed rather than left permanently running |
+| Replay and inspection | Every phase is stored as an `AgentEvent`; compact context exposes the latest checkpoint plus a bounded recent-event window |
+| Failure policy | Timeouts, fail-fast live-search behavior, circuit breaking, schema validation, and deterministic fallbacks keep provider failures from becoming unbounded waits |
+| Deterministic guardrails | Budget enforcement, shipping totals, exclusions, HTTPS validation, deduplication, and ranking are application code—not model promises |
+| Evaluation gates | A deterministic rubric scores relevance, budget fit, diversity, and explainability; regression scenarios run in CI without paid APIs |
+| Operational controls | Request IDs, structured access logs, optional API-key enforcement, rate limiting, cancellation, health checks, and runtime diagnostics surround the agent loop |
+
+This separation is intentional: Claude can interpret fuzzy language and generate useful search directions, but it cannot override the maximum budget, insert an invalid product URL, bypass provider timeouts, or decide whether a run passes the quality gate.
+
+### How this differs from AskingMe-Agent
+
+[AskingMe-Agent](https://github.com/Irenezhangtt/AskingMe-Agent) and Best Gift Search share multi-agent and latency-aware engineering ideas, but they demonstrate different systems problems.
+
+| Dimension | Best Gift Search | AskingMe-Agent |
+| --- | --- | --- |
+| Primary workload | Real-time commerce discovery and constrained ranking | Enterprise policy question answering |
+| Source of truth | Current external shopping results plus validated product fields | Approved, versioned internal policy documents |
+| Main harness responsibility | Coordinate live search, enforce hard monetary constraints, rank products, and degrade safely when providers fail | Coordinate ingestion, adaptive RAG, evidence retrieval, grounded generation, and human-review escalation |
+| Core deterministic controls | Maximum delivered cost, preferred price band, exclusions, URL/image validation, deduplication, and category diversity | Document approval/version lifecycle, retrieval confidence thresholds, access boundaries, and evidence-grounding rules |
+| State and recovery | SQLite event log, compact checkpoints, feedback memory, cancellable jobs, and restart recovery | Redis conversation memory/cache plus ChromaDB policy vectors and lifecycle metadata |
+| Evaluation target | Relevance, budget fit, product diversity, explainability, and search latency | Grounded accuracy, Recall@5, MRR, faithfulness, hallucination rate, routing F1, and latency |
+| User-facing result | Six purchasable product candidates with live images, prices, merchants, links, and match reasons | A synthesized policy answer grounded in governed enterprise evidence |
+
+In short, AskingMe demonstrates a **knowledge and governance harness**; Best Gift Search demonstrates a **tool-using transaction and ranking harness** where live-data freshness, hard numeric constraints, provider reliability, and auditable product selection are first-class concerns.
 
 ## Choose how to view it
 
@@ -77,8 +111,8 @@ Open <http://localhost:5173>. The default configuration uses an in-repository de
 
 1. Describe a recipient, occasion, interests, destination country, and approximate budget.
 2. Select `US`, `CA`, or `GB`, then choose **Find gifts**.
-3. Watch the specialist-agent events appear while the search runs.
-4. Review landed costs, match reasons, caveats, and the automated quality rubric.
+3. Wait for the AI agents to search and rank live product candidates; internal orchestration events remain available through the API rather than cluttering the customer UI.
+4. Review six ranked ideas, landed costs, match reasons, caveats, freshness time, and the automated quality rubric.
 5. Use **Yes/No** feedback; the signal is stored in SQLite and can influence later searches for the same browser user.
 
 Example prompt:
@@ -116,14 +150,14 @@ The 16 browser-demo products are an offline fallback, not the production search 
 ```text
 prompt → structured recipient/occasion/interests/exclusions/budget
        → dynamic Google Shopping query
-       → up to 40 current web products
+       → up to 100 normalized current web candidates
        → relevance, delivered-cost, rating, and diversity ranking
-       → four explained recommendations in the website
+       → six explained recommendations in a three-column website grid
 ```
 
 The live adapter maps the shopping response into the normal `Product` model, including the current title, price, thumbnail, merchant, rating, and HTTPS shopping link. It supports country targeting and negative search terms. If the shopping service is unavailable, the API records a fallback and uses the local catalog instead of failing the whole request.
 
-Live shopping retrieves a broad candidate set, then uses a price band from 50% to 100% of the stated budget whenever that band contains eligible products. The server enforces the maximum after shipping, so an over-budget item can never enter the final shortlist. Ranking favors products closer to the budget and selects distinct inferred categories before filling any remaining positions; for example, an `under $80` request returns products from `$40–$80` across different gift types. Products below the preferred band are used only when the marketplace returns no eligible product inside it.
+Live shopping retrieves a broad candidate set, then prioritizes a price band from 50% to 100% of the stated budget. The server enforces the maximum after shipping, so an over-budget item can never enter the final shortlist. Ranking favors products closer to the budget and selects distinct inferred categories before filling any remaining positions; for example, an `under $80` request prefers products from `$40–$80` across different gift types. If that band contains fewer than six eligible products, the closest lower-priced products fill the remaining positions without exceeding the budget.
 
 Never put `SERPAPI_API_KEY` in `VITE_*`, frontend code, or a GitHub Pages variable. Vite values are public browser code. Store the key only in the backend hosting service.
 
@@ -140,7 +174,7 @@ The browser then sends the prompt to the hosted FastAPI agents. The API key rema
 
 ### Claude semantic search
 
-Set `BEST_GIFT_MODEL_PROVIDER=anthropic` and keep `ANTHROPIC_API_KEY` only in the backend environment to enable Claude-powered intent analysis. Claude converts vague language, relationship context, emotional tone, implicit needs, and exclusions into structured interests plus two or three category-diverse Google Shopping queries. The searches run concurrently, are merged and deduplicated, and then pass through the same strict budget and diversity ranking. If Claude is unavailable or returns invalid JSON, the deterministic parser takes over automatically.
+Set `BEST_GIFT_MODEL_PROVIDER=anthropic` and keep `ANTHROPIC_API_KEY` only in the backend environment to enable Claude-powered intent analysis. Claude converts vague language, relationship context, emotional tone, implicit needs, and exclusions into structured interests plus two category-diverse Google Shopping queries. The searches run concurrently, are merged and deduplicated, and then pass through the same strict budget and diversity ranking. Explicit requests can take a deterministic fast path, while ambiguous requests use Claude; if Claude is unavailable or returns invalid JSON, the deterministic parser takes over automatically.
 
 Multi-query retrieval keeps a balanced candidate quota from every Claude search direction. Final ranking first selects one eligible product per query direction, then fills remaining positions with new product categories before allowing repeats. Normalized-title deduplication removes near-identical listings sold by multiple merchants.
 
